@@ -3,13 +3,13 @@ import pandas as pd
 
 class WeatherHook(HttpHook):
 
-    def __init__(self, start_dt, end_dt, city, key): #, conn_id=None):
+    def __init__(self, start_dt, end_dt, city, key, conn_id=None):
         self.start_dt = start_dt
         self.end_dt = end_dt
         self.city = city
         self.key = key
-        #self.conn_id = conn_id or "twitter_default"
-        #super().__init__(http_conn_id=self.conn_id)
+        self.conn_id = conn_id or "weather_api"
+        super().__init__(http_conn_id=self.conn_id)
 
     def create_url(self):
 
@@ -18,8 +18,7 @@ class WeatherHook(HttpHook):
         city = self.city
         key = self.key
 
-        URL = (f'https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/'
-               f'{city}/{start_dt}/{end_dt}?unitGroup=metric&include=days&key={key}&contentType=csv')
+        URL = (f'{self.base_url}/{city}/{start_dt}/{end_dt}?unitGroup=metric&include=days&key={key}&contentType=csv')
         print(f"URL será usada:{URL}")
         return URL
 
@@ -29,6 +28,7 @@ class WeatherHook(HttpHook):
         return data
 
     def run(self):
+        session = self.get_conn()
         URL = self.create_url()
 
         return self.get_data(URL)
