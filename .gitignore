@@ -1,7 +1,6 @@
 # Ignore python cache files.
 *.pyc
 *.pyo
-plugins/hook/__pycache__/weather_hook.cpython-312.pyc
 
 #Ignorar pastas e arquivos
 logs/
