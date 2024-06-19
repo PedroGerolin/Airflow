@@ -15,5 +15,4 @@ with DAG(
         weather_operator = WeatherOperator(task_id='weather_operator',
                                         cities=cities,
                                         start_dt=start_dt,
-                                        days=days,
-                                        key=key)
+                                        days=days)

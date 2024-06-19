@@ -3,11 +3,10 @@ import pandas as pd
 
 class WeatherHook(HttpHook):
 
-    def __init__(self, start_dt, end_dt, city, key, conn_id=None):
+    def __init__(self, start_dt, end_dt, city, conn_id=None):
         self.start_dt = start_dt
         self.end_dt = end_dt
         self.city = city
-        self.key = key
         self.conn_id = conn_id or "weather_api"
         super().__init__(http_conn_id=self.conn_id)
 

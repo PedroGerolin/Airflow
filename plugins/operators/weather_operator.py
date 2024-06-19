@@ -7,11 +7,10 @@ from airflow.macros import ds_add
 class WeatherOperator(BaseOperator):
     template_fields = ["start_dt"]
 
-    def __init__(self, cities, start_dt, days, key, **kwargs):
+    def __init__(self, cities, start_dt, days, **kwargs):
         super().__init__(**kwargs)
 
         self.cities = cities
-        self.key = key
         self.start_dt = start_dt
         self.days = days
 
@@ -27,7 +26,7 @@ class WeatherOperator(BaseOperator):
             self.create_file_path(city)
             self.create_parent_folder()
 
-            weather_data = WeatherHook(self.start_dt, end_dt, city, self.key)
+            weather_data = WeatherHook(self.start_dt, end_dt, city)
             data = weather_data.run()
             data.to_csv(self.file_path + 'brutos.csv')
             data[['datetime', 'tempmin', 'temp', 'tempmax']].to_csv(self.file_path + 'temperaturas.csv')
