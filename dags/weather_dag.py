@@ -8,8 +8,7 @@ with DAG(
         schedule_interval='@daily' #'0 0 * * 1',  # executar toda segunda feira
 ) as dag:
 
-        cities = ['SaoPaulo']
-        key = 'QNSRNJVD9U43K2Y4WXYY8F6LK'
+        cities = ['SaoPaulo','Campinas','PortoAlegre']
         start_dt = '{{ ds }}'
         days = 6
 
