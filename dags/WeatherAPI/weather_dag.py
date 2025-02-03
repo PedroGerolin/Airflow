@@ -8,9 +8,9 @@ with DAG(
         schedule_interval='@daily' #'0 0 * * 1',  # executar toda segunda feira
 ) as dag:
 
-        cities = ['SaoPaulo','Campinas','PortoAlegre']
+        cities = ['SaoPaulo','PortoAlegre']
         start_dt = '{{ ds }}'
-        days = 6
+        days = 3
 
         weather_operator = WeatherOperator(task_id='weather_operator',
                                         cities=cities,
