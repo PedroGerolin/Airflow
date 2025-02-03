@@ -4,11 +4,11 @@ from operators.weather_operator import WeatherOperator
 
 with DAG(
         "WeatherAPI",
-        start_date=pendulum.datetime(2024, 6, 12, tz="UTC"),
+        start_date=pendulum.datetime(2025, 2, 1, tz="UTC"),
         schedule_interval='@daily' #'0 0 * * 1',  # executar toda segunda feira
 ) as dag:
 
-        cities = ['SaoPaulo','PortoAlegre']
+        cities = ['SaoPaulo','Calgary']
         start_dt = '{{ ds }}'
         days = 3
 
