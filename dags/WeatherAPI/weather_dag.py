@@ -6,7 +6,8 @@ from airflow.operators.dummy_operator import DummyOperator
 with DAG(
         dag_id="WeatherAPI",
         start_date=pendulum.datetime(2025, 2, 1, tz="UTC"),
-        schedule_interval='@daily' #'0 0 * * 1',  # executar toda segunda feira
+        schedule_interval='@daily', #'0 0 * * 1',  # executar toda segunda feira,
+        catchup=True,
 ) as dag:
 
         cities = ['SaoPaulo','Calgary']
