@@ -1,9 +1,10 @@
 from datetime import datetime, timedelta
 from pathlib import Path
-from airflow.models import BaseOperator
+from airflow.models import BaseOperator # type: ignore
 from hook.weather_hook import WeatherHook
-from airflow.macros import ds_add
-from airflow.providers.google.cloud.transfers.local_to_gcs import LocalFilesystemToGCSOperator
+from modules.converter import Converter
+from modules.transfer import TransferFile
+from airflow.macros import ds_add # type: ignore
 import os
 
 class WeatherOperator(BaseOperator):
@@ -22,29 +23,6 @@ class WeatherOperator(BaseOperator):
     def create_parent_folder(self, full_path):
         Path(full_path).parent.mkdir(parents=True, exist_ok=True)
 
-    def transfer_file_gcs(self, data_folder, gcs_path, **kwargs):
-        data_folder = self.file_path
-        bucket_name = 'gerolin_etl'
-        gcs_conn_id = 'google_cloud_default'
-
-        csv_files = [file for file in os.listdir(data_folder) if file.endswith('dados_brutos.csv')]
-
-        for file in csv_files:
-            local_file_path = os.path.join(data_folder, file)
-            gcs_file_path = gcs_path + file
-
-            print(f"Arquivo será usada:{local_file_path}")
-
-            upload_to_gcs = LocalFilesystemToGCSOperator(
-                task_id='upload_to_gcs',
-                src=local_file_path,
-                dst=gcs_file_path,
-                bucket=bucket_name,
-                gcp_conn_id=gcs_conn_id
-            )
-            upload_to_gcs.execute(context=kwargs)
-
-
     def execute(self, context):
         end_dt = ds_add(self.start_dt,self.days)
         for city in self.cities:
@@ -57,11 +35,16 @@ class WeatherOperator(BaseOperator):
 
             weather_data = WeatherHook(self.start_dt, end_dt, city)
             data = weather_data.run()
-            data.to_csv(filename_full)
+            data.to_csv(filename_full, index=False)
             data[['datetime', 'tempmin', 'temp', 'tempmax']].to_csv(filename_temperature)
             data[['datetime', 'description', 'icon']].to_csv(filename_conditions)
 
-            self.transfer_file_gcs(data_folder=self.file_path, gcs_path=f'WeatherAPI/city={city}/semana={self.start_dt}/')
+            converter = Converter('csv','orc',self.file_path,'dados_brutos.csv')
+            converter.convert()
+
+            transfer = TransferFile(PathOrig=self.file_path,PathDest=f'WeatherAPI/city={city}/semana={self.start_dt}/')
+            transfer.transfer_file_gcs()
+            
 
         
         

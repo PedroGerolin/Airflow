@@ -1,7 +1,7 @@
-from airflow import DAG
+from airflow import DAG # type: ignore
 import pendulum
-from operators.weather_operator import WeatherOperator
-from airflow.operators.dummy_operator import DummyOperator
+from operators.weather_operator import WeatherOperator # type: ignore
+from airflow.operators.dummy_operator import DummyOperator # type: ignore
 
 with DAG(
         dag_id="WeatherAPI",
