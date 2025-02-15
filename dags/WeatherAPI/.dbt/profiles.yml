@@ -1,0 +1,10 @@
+bigquery:
+  target: dev
+  outputs:
+    dev:
+      type: bigquery
+      method: service-account
+      keyfile: C:\Airflow\credential\gerolingcp-9ff636503d6b.json
+      project: gerolingcp
+      dataset: WeatherAPI
+      threads: 1 
