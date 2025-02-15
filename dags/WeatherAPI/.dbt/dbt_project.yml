@@ -1,0 +1,16 @@
+name: 'weather_api'
+version: '1.0.0'
+profile: 'bigquery'
+model-paths: ["models"]
+test-paths: ["tests"]
+macro-paths: ["macros"]
+clean-targets:         # directories to be removed by `dbt clean`
+  - "target"
+  - "dbt_packages"
+
+models:
+  weather_api:
+    external:
+      +schema: WeatherAPI_External
+    native:
+      +schema: WeatherAPI
