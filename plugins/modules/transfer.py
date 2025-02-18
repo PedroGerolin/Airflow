@@ -4,9 +4,10 @@ import os
 
 class TransferFile:
 
-    def __init__(self, PathOrig,PathDest):
+    def __init__(self, PathOrig,PathDest,FileSuffix):
         self.PathOrig = PathOrig
         self.FileOrig = PathDest
+        self.FileSuffix = FileSuffix
 
 
     def transfer_file_gcs(self):
@@ -14,7 +15,7 @@ class TransferFile:
             bucket_name = 'gerolin_etl'
             gcs_conn_id = 'google_cloud_default'
 
-            orc_files = [file for file in os.listdir(data_folder) if file.endswith('dados_brutos.orc')]
+            orc_files = [file for file in os.listdir(data_folder) if file.endswith(self.FileSuffix)]
 
             for file in orc_files:
                 local_file_path = os.path.join(data_folder, file)

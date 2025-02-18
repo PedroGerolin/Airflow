@@ -38,12 +38,6 @@ class WeatherOperator(BaseOperator):
             data.to_csv(filename_full, index=False)
             data[['datetime', 'tempmin', 'temp', 'tempmax']].to_csv(filename_temperature)
             data[['datetime', 'description', 'icon']].to_csv(filename_conditions)
-
-            converter = Converter('csv','orc',self.file_path,'dados_brutos.csv')
-            converter.convert()
-
-            transfer = TransferFile(PathOrig=self.file_path,PathDest=f'WeatherAPI/city={city}/semana={self.start_dt}/')
-            transfer.transfer_file_gcs()
             
 
         
