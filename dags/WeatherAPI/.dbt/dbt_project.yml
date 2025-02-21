@@ -8,9 +8,4 @@ clean-targets:         # directories to be removed by `dbt clean`
   - "target"
   - "dbt_packages"
 
-models:
-  weather_api:
-    external:
-      +schema: WeatherAPI_External
-    native:
-      +schema: WeatherAPI
+

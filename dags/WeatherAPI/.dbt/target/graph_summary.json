@@ -1,1 +1,1 @@
-{"_invocation_id": "b504f8ae-3516-4232-86bf-02cf5e74480c", "linked": {"0": {"name": "model.weather_api.weather", "type": "model"}}}
+{"_invocation_id": "5c376ac6-bd14-4458-9b7f-aa77c4eef470", "linked": {"0": {"name": "source.weather_api.WeatherAPI_External.weather_data", "type": "source", "succ": [2]}, "1": {"name": "model.weather_api.weather_summary", "type": "model"}, "2": {"name": "model.weather_api.weather", "type": "model", "succ": [1]}}}

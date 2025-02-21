@@ -1,0 +1,92 @@
+version: 2 
+
+sources:
+  - name: WeatherAPI_External
+    tables:  
+      - name: weather_data
+        description: Data model for weather data
+        external: 
+          location: "gs://gerolin_etl/WeatherAPI/*.orc"
+          options:
+            format: ORC
+            hive_partition_uri_prefix: "gs://gerolin_etl/WeatherAPI/"
+        columns:
+          - name: name
+            description: Name of the weather location
+            type: string
+          - name: datetime
+            description: Date and time of the weather data
+            type: string
+          - name: tempmax
+            description: Maximum temperature in Celsius
+            type: string
+          - name: tempmin
+            description: Minimum temperature in Celsius
+            type: string
+          - name: city
+            description: City of the weather location
+            type: string
+          - name: cloudcover
+            type: string
+          - name: conditions
+            type: string
+          - name: description
+            type: string
+          - name: dew
+            type: string
+          - name: feelslike
+            type: string
+          - name: feelslikemax
+            type: string
+          - name: feelslikemin
+            type: string
+          - name: humidity
+            type: string
+          - name: icon
+            type: string
+          - name: moonphase
+            type: string
+          - name: name
+            type: string
+          - name: precip
+            type: string
+          - name: precipcover
+            type: string
+          - name: precipprob
+            type: string
+          - name: preciptype
+            type: string
+          - name: sealevelpressure
+            type: string
+          - name: semana
+            type: DATE
+          - name: severerisk
+            type: string
+          - name: snow
+            type: string
+          - name: snowdepth
+            type: string
+          - name: solarenergy
+            type: string
+          - name: solarradiation
+            type: string
+          - name: stations
+            type: string
+          - name: sunrise
+            type: string
+          - name: sunset
+            type: string
+          - name: temp
+            type: string
+          - name: uvindex
+            type: string
+          - name: visibility
+            type: string
+          - name: winddir
+            type: string
+          - name: windgust
+            type: string
+          - name: windspeed
+            type: string
+
+            materialized: table
