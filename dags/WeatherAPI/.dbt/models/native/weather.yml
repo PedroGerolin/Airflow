@@ -1,0 +1,28 @@
+version: 2 
+
+models:
+  - name: weather
+    description: Data model for weather data
+    schema: WeatherAPI
+    columns:
+      - name: date
+        description: Date of the weather data
+        type: date
+        #tests:
+        #  - not_null
+        name: location
+        description: Location of the weather data
+        type: string
+        #tests:
+        #  - not_null
+        name: temperature_max
+        description: Maximum temperature in Celsius
+        type: float
+        #tests:
+        #  - not_null
+        name: temperature_min
+        description: Minimum temperature in Celsius
+        type: float
+        #tests:
+        #  - not_null
+    materialized: table

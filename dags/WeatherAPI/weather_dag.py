@@ -25,7 +25,7 @@ with DAG(
             task_id = 'start_task',
             dag = dag
         )  
-
+        
         weather_operator = WeatherOperator(
             task_id='weather_operator',
             cities=cities,
@@ -55,6 +55,11 @@ with DAG(
                 )
                 transfer.transfer_file_gcs()
         
+        dbt_test = BashOperator(
+            task_id='dbt_test',
+            bash_command=f'dbt test --profiles-dir {DBT_PROJECT_DIR} --project-dir {DBT_PROJECT_DIR}',
+            dag=dag
+        )
         dbt_run = BashOperator(
             task_id='dbt_run',
             bash_command=f'dbt run --profiles-dir {DBT_PROJECT_DIR} --project-dir {DBT_PROJECT_DIR}',
@@ -70,5 +75,6 @@ start_task >> \
 Label("Buscar dados por API") >> weather_operator >> \
 Label("Faz a conversão de arquivos") >> conversao(start_dt) >> \
 Label("Faz o envio de arquivos") >> transfer(start_dt) >> \
+Label("Executa os testes do DBT") >> dbt_test >> \
 Label("Executa o DBT") >> dbt_run >> \
 Label("Finaliza o processo") >> end_task

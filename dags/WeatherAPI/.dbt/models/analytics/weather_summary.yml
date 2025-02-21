@@ -1,0 +1,7 @@
+version: 2 
+
+models:
+  - name: weather_summary
+    description: Summary of weather data
+    schema: WeatherAPI_Analytics
+    materialized: table
