@@ -5,8 +5,10 @@ from airflow.operators.empty import EmptyOperator
 from airflow.operators.bash import BashOperator
 from modules.converter import Converter
 from modules.transfer import TransferFile 
+from modules.exporter import Exporter
 from airflow.decorators import task
 from airflow.utils.edgemodifier import Label
+from airflow.operators.python import get_current_context
 
 with DAG(
         dag_id="WeatherAPI",
@@ -66,6 +68,15 @@ with DAG(
             dag=dag
         )
 
+        @task()
+        def export():
+            context = get_current_context()
+            project_id = "gerolingcp"
+            dataset_id = "WeatherAPI_Analytics"
+            table_name = "weather_summary"
+            export = Exporter(project_id,dataset_id,table_name)
+            export.export(context=context)
+
         end_task = EmptyOperator(
             task_id = 'end_task',
             dag = dag
@@ -77,4 +88,5 @@ Label("Faz a conversão de arquivos") >> conversao(start_dt) >> \
 Label("Faz o envio de arquivos") >> transfer(start_dt) >> \
 Label("Executa os testes do DBT") >> dbt_test >> \
 Label("Executa o DBT") >> dbt_run >> \
+Label("Exporta do BigQuery Para o GCS") >> export() >> \
 Label("Finaliza o processo") >> end_task
