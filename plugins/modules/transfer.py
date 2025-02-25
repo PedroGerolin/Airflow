@@ -1,5 +1,5 @@
 
-from airflow.providers.google.cloud.transfers.local_to_gcs import LocalFilesystemToGCSOperator # type: ignore
+from airflow.providers.google.cloud.transfers.local_to_gcs import LocalFilesystemToGCSOperator
 import os
 
 class TransferFile:
