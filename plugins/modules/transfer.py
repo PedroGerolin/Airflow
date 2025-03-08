@@ -4,24 +4,40 @@ import os
 
 class TransferFile:
 
-    def __init__(self, PathOrig,PathDest,FileSuffix):
+    def __init__(self, PathOrig,PathDest,FileSuffix=None, FilePrefix=None, DynamicPath=False):
         self.PathOrig = PathOrig
-        self.FileOrig = PathDest
+        self.PathDest = PathDest
         self.FileSuffix = FileSuffix
+        self.FilePrefix = FilePrefix
+        self.DynamicPath = DynamicPath
 
-
-    def transfer_file_gcs(self):
+    def transfer_file_gcs(self, delete_original_file=False):
             data_folder = self.PathOrig
             bucket_name = 'gerolin_etl'
             gcs_conn_id = 'google_cloud_default'
 
-            orc_files = [file for file in os.listdir(data_folder) if file.endswith(self.FileSuffix)]
+            #print(f'Procurando arquivos em:{data_folder}')
+            #print(f'Arquivos serão enviados para:{self.PathDest}')
+            #print(f'File Suffix:{self.FileSuffix}')
+            #print(f'File Prefix:{self.FilePrefix}')
 
-            for file in orc_files:
+            if self.FileSuffix:
+                files = [file for file in os.listdir(data_folder) if file.endswith(self.FileSuffix)]
+                #print(f'Qtde de arquivos encontrados com sufixo: {files}')
+            elif self.FilePrefix:
+                files = [file for file in os.listdir(data_folder) if file.startswith(self.FilePrefix)]
+                #print(f'Qtde de arquivos encontrados com prefixo: {files}')
+
+            for file in files:
                 local_file_path = os.path.join(data_folder, file)
-                gcs_file_path = self.FileOrig + file
+                #print(f"Arquivo será usado:{local_file_path}")
 
-                print(f"Arquivo será usada:{local_file_path}")
+                if self.DynamicPath:
+                    gcs_file_path = self.PathDest + file.replace(self.FilePrefix,'').replace('.csv','') + '/'
+                    #print(f"Arquivo será salvo em:{gcs_file_path}")
+                elif self.FileSuffix:
+                    gcs_file_path = self.PathDest + file
+                    #print(f"Arquivo será salvo em:{gcs_file_path}")
 
                 upload_to_gcs = LocalFilesystemToGCSOperator(
                     task_id='upload_to_gcs',
@@ -31,3 +47,10 @@ class TransferFile:
                     gcp_conn_id=gcs_conn_id
                 )
                 upload_to_gcs.execute(context=None)
+                
+                if delete_original_file:
+                    os.remove(local_file_path)
+            
+            
+                
+                

@@ -1,0 +1,10 @@
+bigquery:
+  target: prod
+  outputs:
+    prod:
+      type: bigquery
+      method: service-account
+      keyfile: /opt/airflow/credential/gerolingcp-9ff636503d6b.json
+      project: gerolingcp
+      dataset: FisioVet
+      threads: 1 
