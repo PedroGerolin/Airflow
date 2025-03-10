@@ -18,6 +18,10 @@ class FileTransformer:
         return result['encoding']
     
     def header_normalize(self, delete_original_file=False):
+        if not os.path.isfile(self.full_path):
+            print(f'Arquivo {self.full_path} não encontrado')
+            return
+        
         df = pd.read_csv(self.full_path
                         ,dtype=str
                         ,sep=';'
@@ -48,6 +52,10 @@ class FileTransformer:
             os.remove(self.full_path)
     
     def split_file(self, file, group_by, format, delete_original_file=False):
+        if not os.path.isfile(f'{self.file_path}{file}'):
+            print(f'Arquivo {self.file_path}{file} não encontrado')
+            return
+        
         df = pd.read_csv(f'{self.file_path}{file}'
                         ,dtype=str
                         ,sep='|'

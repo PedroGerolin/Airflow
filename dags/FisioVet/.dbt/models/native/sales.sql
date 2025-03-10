@@ -8,7 +8,7 @@
         } 
     ) 
 }}
-    SELECT  
+SELECT  
         CAST(Dataehora AS DATETIME FORMAT 'DD/MM/YYYY HH24:MI') AS DataHora,
         Venda,
         Statusdavenda AS Status,
@@ -17,14 +17,6 @@
         Funcionario,
         Cliente AS NomeCliente,
         Codigo AS CodigoCliente,
-        CPF,
-        Sexo,
-        CEP,
-        Endereco,
-        Numero,
-        Bairro,
-        Email,
-        Celular,
         Animal AS NomeAnimal,
         Especie,
         Sexo_1 AS SexoAnimal,
@@ -40,3 +32,4 @@
         Observacoes,
         date
     FROM `gerolingcp.FisioVet_External.sales`
+QUALIFY ROW_NUMBER()OVER(PARTITION BY Venda,Codigo,Animal,Produto_Servico ORDER BY Venda) = 1

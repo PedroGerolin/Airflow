@@ -1,0 +1,7 @@
+version: 2 
+
+models:
+  - name: sales
+    description: Sales data model
+    schema: FisioVet
+    materialized: table
