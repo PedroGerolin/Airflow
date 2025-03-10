@@ -15,29 +15,23 @@ class TransferFile:
             data_folder = self.PathOrig
             bucket_name = 'gerolin_etl'
             gcs_conn_id = 'google_cloud_default'
-
-            #print(f'Procurando arquivos em:{data_folder}')
-            #print(f'Arquivos serão enviados para:{self.PathDest}')
-            #print(f'File Suffix:{self.FileSuffix}')
-            #print(f'File Prefix:{self.FilePrefix}')
-
+            
             if self.FileSuffix:
                 files = [file for file in os.listdir(data_folder) if file.endswith(self.FileSuffix)]
-                #print(f'Qtde de arquivos encontrados com sufixo: {files}')
             elif self.FilePrefix:
                 files = [file for file in os.listdir(data_folder) if file.startswith(self.FilePrefix)]
-                #print(f'Qtde de arquivos encontrados com prefixo: {files}')
 
+            if not files:
+                    print(f'Arquivo não encontrado')
+                    return
+            
             for file in files:
                 local_file_path = os.path.join(data_folder, file)
-                #print(f"Arquivo será usado:{local_file_path}")
 
                 if self.DynamicPath:
                     gcs_file_path = self.PathDest + file.replace(self.FilePrefix,'').replace('.csv','') + '/'
-                    #print(f"Arquivo será salvo em:{gcs_file_path}")
                 elif self.FileSuffix:
                     gcs_file_path = self.PathDest + file
-                    #print(f"Arquivo será salvo em:{gcs_file_path}")
 
                 upload_to_gcs = LocalFilesystemToGCSOperator(
                     task_id='upload_to_gcs',

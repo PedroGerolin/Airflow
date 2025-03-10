@@ -1,0 +1,7 @@
+version: 2 
+
+models:
+  - name: clients
+    description: Cadastro de Clientes
+    schema: FisioVet
+    materialized: table
