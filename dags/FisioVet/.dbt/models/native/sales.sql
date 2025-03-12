@@ -1,6 +1,7 @@
 {{ 
     config(
         materialized='incremental',
+        incremental_strategy='insert_overwrite',
         unique_key=['Venda','CodigoCliente','NomeAnimal','ProdutoServico'],
         partition_by={
             "field":"date",
@@ -32,4 +33,9 @@ SELECT
         Observacoes,
         date
     FROM `gerolingcp.FisioVet_External.sales`
+
+    {% if is_incremental() %}
+       where date >= (select {{ dbt.dateadd("day", -60, "max(date)") }} from {{ this }}) 
+    {% endif %}
+
 QUALIFY ROW_NUMBER()OVER(PARTITION BY Venda,Codigo,Animal,Produto_Servico ORDER BY Venda) = 1

@@ -1,27 +1,25 @@
--- back compat for old kwarg name
-  
-  
+
+   
+      -- generated script to merge partitions into `gerolingcp`.`FisioVet`.`sales`
+      declare dbt_partitions_for_replacement array<date>;
+
+      
+      
+       -- 1. create a temp table with model data
         
-            
-                
-                
-            
-                
-                
-            
-                
-                
-            
-                
-                
-            
-        
+  
     
 
+    create or replace table `gerolingcp`.`FisioVet`.`sales__dbt_tmp`
+      
+    partition by date
     
 
-    merge into `gerolingcp`.`FisioVet`.`sales` as DBT_INTERNAL_DEST
-        using (
+    OPTIONS(
+      expiration_timestamp=TIMESTAMP_ADD(CURRENT_TIMESTAMP(), INTERVAL 12 hour)
+    )
+    as (
+      
 SELECT  
         CAST(Dataehora AS DATETIME FORMAT 'DD/MM/YYYY HH24:MI') AS DataHora,
         Venda,
@@ -46,27 +44,47 @@ SELECT
         Observacoes,
         date
     FROM `gerolingcp.FisioVet_External.sales`
-QUALIFY ROW_NUMBER()OVER(PARTITION BY Venda,Codigo,Animal,Produto_Servico ORDER BY Venda) = 1
-        ) as DBT_INTERNAL_SOURCE
-        on (
-                    DBT_INTERNAL_SOURCE.Venda = DBT_INTERNAL_DEST.Venda
-                ) and (
-                    DBT_INTERNAL_SOURCE.CodigoCliente = DBT_INTERNAL_DEST.CodigoCliente
-                ) and (
-                    DBT_INTERNAL_SOURCE.NomeAnimal = DBT_INTERNAL_DEST.NomeAnimal
-                ) and (
-                    DBT_INTERNAL_SOURCE.ProdutoServico = DBT_INTERNAL_DEST.ProdutoServico
-                )
 
     
-    when matched then update set
-        `DataHora` = DBT_INTERNAL_SOURCE.`DataHora`,`Venda` = DBT_INTERNAL_SOURCE.`Venda`,`Status` = DBT_INTERNAL_SOURCE.`Status`,`DataBaixa` = DBT_INTERNAL_SOURCE.`DataBaixa`,`FormaPagamento` = DBT_INTERNAL_SOURCE.`FormaPagamento`,`Funcionario` = DBT_INTERNAL_SOURCE.`Funcionario`,`NomeCliente` = DBT_INTERNAL_SOURCE.`NomeCliente`,`CodigoCliente` = DBT_INTERNAL_SOURCE.`CodigoCliente`,`NomeAnimal` = DBT_INTERNAL_SOURCE.`NomeAnimal`,`Especie` = DBT_INTERNAL_SOURCE.`Especie`,`SexoAnimal` = DBT_INTERNAL_SOURCE.`SexoAnimal`,`Raca` = DBT_INTERNAL_SOURCE.`Raca`,`TipoItem` = DBT_INTERNAL_SOURCE.`TipoItem`,`Grupo` = DBT_INTERNAL_SOURCE.`Grupo`,`ProdutoServico` = DBT_INTERNAL_SOURCE.`ProdutoServico`,`ValorUnitario` = DBT_INTERNAL_SOURCE.`ValorUnitario`,`Quantidade` = DBT_INTERNAL_SOURCE.`Quantidade`,`Bruto` = DBT_INTERNAL_SOURCE.`Bruto`,`Desconto` = DBT_INTERNAL_SOURCE.`Desconto`,`Liquido` = DBT_INTERNAL_SOURCE.`Liquido`,`Observacoes` = DBT_INTERNAL_SOURCE.`Observacoes`,`date` = DBT_INTERNAL_SOURCE.`date`
-    
+
+QUALIFY ROW_NUMBER()OVER(PARTITION BY Venda,Codigo,Animal,Produto_Servico ORDER BY Venda) = 1
+    );
+  
+      -- 2. define partitions to update
+      set (dbt_partitions_for_replacement) = (
+          select as struct
+              -- IGNORE NULLS: this needs to be aligned to _dbt_max_partition, which ignores null
+              array_agg(distinct date(date) IGNORE NULLS)
+          from `gerolingcp`.`FisioVet`.`sales__dbt_tmp`
+      );
+
+      -- 3. run the merge statement
+      
+
+    merge into `gerolingcp`.`FisioVet`.`sales` as DBT_INTERNAL_DEST
+        using (
+        select
+        * from `gerolingcp`.`FisioVet`.`sales__dbt_tmp`
+      ) as DBT_INTERNAL_SOURCE
+        on FALSE
+
+    when not matched by source
+         and date(DBT_INTERNAL_DEST.date) in unnest(dbt_partitions_for_replacement) 
+        then delete
 
     when not matched then insert
         (`DataHora`, `Venda`, `Status`, `DataBaixa`, `FormaPagamento`, `Funcionario`, `NomeCliente`, `CodigoCliente`, `NomeAnimal`, `Especie`, `SexoAnimal`, `Raca`, `TipoItem`, `Grupo`, `ProdutoServico`, `ValorUnitario`, `Quantidade`, `Bruto`, `Desconto`, `Liquido`, `Observacoes`, `date`)
     values
         (`DataHora`, `Venda`, `Status`, `DataBaixa`, `FormaPagamento`, `Funcionario`, `NomeCliente`, `CodigoCliente`, `NomeAnimal`, `Especie`, `SexoAnimal`, `Raca`, `TipoItem`, `Grupo`, `ProdutoServico`, `ValorUnitario`, `Quantidade`, `Bruto`, `Desconto`, `Liquido`, `Observacoes`, `date`)
 
+;
+
+      -- 4. clean up the temp table
+      drop table if exists `gerolingcp`.`FisioVet`.`sales__dbt_tmp`
+
+  
+
+
+  
 
     
