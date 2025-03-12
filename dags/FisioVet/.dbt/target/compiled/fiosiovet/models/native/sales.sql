@@ -23,4 +23,7 @@ SELECT
         Observacoes,
         date
     FROM `gerolingcp.FisioVet_External.sales`
+
+    
+
 QUALIFY ROW_NUMBER()OVER(PARTITION BY Venda,Codigo,Animal,Produto_Servico ORDER BY Venda) = 1
