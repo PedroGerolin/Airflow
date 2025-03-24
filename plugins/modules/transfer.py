@@ -41,9 +41,11 @@ class TransferFile:
                     gcp_conn_id=gcs_conn_id
                 )
                 upload_to_gcs.execute(context=None)
+                print(f'Arquivo {local_file_path} transferido para {gcs_file_path}.')
                 
                 if delete_original_file:
                     os.remove(local_file_path)
+                    print(f'Arquivo {local_file_path} deletado.')
             
             
                 

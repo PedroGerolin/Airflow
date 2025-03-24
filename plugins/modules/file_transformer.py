@@ -6,11 +6,12 @@ import unicodedata
 
 class FileTransformer:
 
-    def __init__(self, file_path, file_name, new_file_name=None):
+    def __init__(self, file_path, file_name, new_file_name=None, sep=';'):
         self.file_path = file_path
         self.file_name = file_name
         self.new_file_name = new_file_name if new_file_name else file_name
         self.full_path = f'{self.file_path}{self.file_name}'
+        self.sep = sep
 
     def detect_encoding(self, full_path=None):
         with open(full_path if full_path else self.full_path, 'rb') as f:
@@ -24,7 +25,7 @@ class FileTransformer:
         
         df = pd.read_csv(self.full_path
                         ,dtype=str
-                        ,sep=';'
+                        ,sep=self.sep
                         ,quotechar='"'
                         ,header=0
                         ,encoding=self.detect_encoding()
@@ -34,6 +35,7 @@ class FileTransformer:
         for col in df.columns:
             col = col.replace(' ','')
             col = col.replace('-','_')
+            col = col.replace('/','_')
             col = unicodedata.normalize('NFKD', col)
             col = col.encode('ascii', 'ignore')
             col = col.decode("utf-8")
@@ -50,6 +52,7 @@ class FileTransformer:
                 )
         if delete_original_file:
             os.remove(self.full_path)
+            print(f'Arquivo {self.full_path} deletado.')
     
     def split_file(self, file, group_by, format, delete_original_file=False):
         if not os.path.isfile(f'{self.file_path}{file}'):
@@ -73,3 +76,4 @@ class FileTransformer:
                                     )
         if delete_original_file:
             os.remove(f'{self.file_path}{file}')
+            print(f'Arquivo {self.file_path}{file} deletado.')

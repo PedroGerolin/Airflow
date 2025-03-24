@@ -35,7 +35,7 @@ SELECT
     FROM `gerolingcp.FisioVet_External.sales`
 
     {% if is_incremental() %}
-       where date >= (select {{ dbt.dateadd("day", -60, "max(date)") }} from {{ this }}) 
+       where date >= (select {{ dbt.dateadd("day", -90, "max(date)") }} from {{ this }}) 
     {% endif %}
 
 QUALIFY ROW_NUMBER()OVER(PARTITION BY Venda,Codigo,Animal,Produto_Servico ORDER BY Venda) = 1
