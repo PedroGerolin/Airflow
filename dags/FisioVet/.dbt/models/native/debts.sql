@@ -15,7 +15,7 @@
         Descricao,
         Fornecedor,
         Parcela,
-        Competencia,
+        Data as Competencia,
         Valor,
         Desconto,
         Multa,

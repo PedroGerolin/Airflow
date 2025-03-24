@@ -7,6 +7,7 @@ from airflow.operators.empty import EmptyOperator
 from airflow.operators.bash import BashOperator
 from airflow.decorators import task, dag, task_group
 from airflow.utils.edgemodifier import Label
+from airflow.sensors.filesystem import FileSensor
 
 default_args = {
     'DBT_PROJECT_DIR': '/opt/airflow/dags/FisioVet/.dbt',
@@ -26,7 +27,7 @@ def fisiovet_dag():
     start_task = EmptyOperator(
             task_id = 'start_task'
         )  
-    
+
     @task_group()
     def file_transformation():
         @task()
@@ -51,7 +52,9 @@ def fisiovet_dag():
             file = FileTransformer(
                 file_path=default_args['fisiovet_file_path'],
                 file_name='contas-a-pagar.csv',
-                new_file_name=f'debts.csv')
+                new_file_name=f'debts.csv', 
+                sep=','
+            )
             file.header_normalize(delete_original_file=True)
             file.split_file('debts.csv','Data','%d/%m/%Y',delete_original_file=True)
 
@@ -93,7 +96,7 @@ def fisiovet_dag():
 
     dbt_run = BashOperator(
              task_id='dbt_run',
-             bash_command=f'dbt run -s sales --profiles-dir {default_args["DBT_PROJECT_DIR"]} --project-dir {default_args["DBT_PROJECT_DIR"]}'
+             bash_command=f'dbt run --profiles-dir {default_args["DBT_PROJECT_DIR"]} --project-dir {default_args["DBT_PROJECT_DIR"]}'
          )
     
     end_task = EmptyOperator(

@@ -25,5 +25,14 @@ SELECT
     FROM `gerolingcp.FisioVet_External.sales`
 
     
+       where date >= (select 
+
+        datetime_add(
+            cast( max(date) as datetime),
+        interval -90 day
+        )
+
+ from `gerolingcp`.`FisioVet`.`sales`) 
+    
 
 QUALIFY ROW_NUMBER()OVER(PARTITION BY Venda,Codigo,Animal,Produto_Servico ORDER BY Venda) = 1

@@ -1,0 +1,7 @@
+version: 2 
+
+models:
+  - name: debts
+    description: Debts data model
+    schema: FisioVet
+    materialized: table
