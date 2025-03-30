@@ -3,11 +3,12 @@ import pendulum
 from modules.file_transformer import FileTransformer
 from modules.transfer import TransferFile 
 from modules.exporter import Exporter 
+from modules.fisiovet_downloader import fisioVetDownloader
 from airflow.operators.empty import EmptyOperator
 from airflow.operators.bash import BashOperator
 from airflow.decorators import task, dag, task_group
 from airflow.utils.edgemodifier import Label
-from airflow.sensors.filesystem import FileSensor
+
 
 default_args = {
     'DBT_PROJECT_DIR': '/opt/airflow/dags/FisioVet/.dbt',
@@ -17,6 +18,7 @@ default_args = {
         dag_id="fisiovet",
         default_args=default_args,
         start_date=pendulum.datetime(2025, 1, 1, tz="UTC"),
+        schedule_interval=None,  # Não executar automaticamente
         #schedule_interval='@daily',  # executar diariamente
         #schedule_interval='0 0 * * 1',  # executar toda segunda feira,
         catchup=False,
@@ -27,6 +29,28 @@ def fisiovet_dag():
     start_task = EmptyOperator(
             task_id = 'start_task'
         )  
+
+    @task_group()
+    def fisiovet_downloader():    
+        def iniciarfisioVetDownloader():
+            fisioVet = fisioVetDownloader()
+            fisioVet.iniciar_navegador()
+            fisioVet.realizar_login()
+            return fisioVet
+        
+        @task()
+        def download_clients_file():
+            fisioVetClients = iniciarfisioVetDownloader()
+            fisioVetClients.enter_clients_page()
+            fisioVetClients.export_clients()
+        
+        @task()
+        def download_sales_file():
+            fisioVetSales = iniciarfisioVetDownloader()
+            fisioVetSales.enter_sales_page()
+            fisioVetSales.export_sales()
+    
+        download_clients_file() >> download_sales_file()
 
     @task_group()
     def file_transformation():
@@ -104,6 +128,7 @@ def fisiovet_dag():
         )   
     
     start_task >> \
+    Label("Download dos arquivos") >> fisiovet_downloader() >> \
     Label("Buscar e Normalizar arquivos") >> file_transformation() >> \
     Label("Envio para GCS") >> file_transfer() >> \
     Label("Executa o DBT") >> dbt_run >> \
