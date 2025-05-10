@@ -9,4 +9,6 @@ files/
 dev/
 credential/
 Airflow_DBT
+dags/FisioVet/.dbt/target
+dags/FisioVet/.dbt/profiles.yml
 
