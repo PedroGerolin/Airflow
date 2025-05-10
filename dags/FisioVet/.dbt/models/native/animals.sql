@@ -20,4 +20,4 @@
         Animal_Status AS Status,
         Animal_Datadeinclusao AS DataInclusao,
         Animal_Vivo_Morto AS VivoMorto
-    FROM `gerolingcp.FisioVet_External.clients_animals`
+    FROM {{ source('FisioVet_External','clients_animals')}}

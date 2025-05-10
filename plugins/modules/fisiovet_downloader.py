@@ -62,7 +62,7 @@ class fisioVetDownloader:
         time.sleep(2)
 
     def export_sales(self):
-        dataInicial = (datetime.date.today().replace(day=1)-timedelta(days=1)).replace(day=1).strftime("%d/%m/%Y")
+        dataInicial = '01/02/2025'#(datetime.date.today().replace(day=1)-timedelta(month=1)).replace(day=1).strftime("%d/%m/%Y")
         dataFinal = datetime.date.today().strftime("%d/%m/%Y")
         
         txtData = self.driver.find_element(By.ID, "p__ven_dat_data")

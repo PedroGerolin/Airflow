@@ -7,5 +7,10 @@ macro-paths: ["macros"]
 clean-targets:         # directories to be removed by `dbt clean`
   - "target"
   - "dbt_packages"
-
-
+models:
+  native:
+    +schema: 'native'
+    transient: false
+  analytics:
+    +schema: 'analytics'
+    transient: false

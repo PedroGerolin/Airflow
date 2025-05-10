@@ -1,0 +1,9 @@
+version: 2
+
+sources:
+  - name: FisioVet
+    schema: FisioVet
+    tables:
+      - name: commission
+      - name: debts_types
+      - name: services

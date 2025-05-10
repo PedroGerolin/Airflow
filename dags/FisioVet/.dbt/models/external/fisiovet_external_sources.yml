@@ -1,0 +1,9 @@
+version: 2
+
+sources:
+  - name: FisioVet_External
+    schema: FisioVet_External
+    tables:
+      - name: sales
+      - name: debts
+      - name: clients_animals

@@ -1,10 +1,23 @@
 bigquery:
-  target: prod
+  target: prod_bigquery
   outputs:
-    prod:
+    prod_bigquery:
       type: bigquery
       method: service-account
       keyfile: /opt/airflow/credential/gerolingcp-9ff636503d6b.json
       project: gerolingcp
       dataset: FisioVet
       threads: 1 
+
+snowflake:
+  target: dev_snowflake
+  outputs:
+    dev_snowflake:
+      type: snowflake
+      account: XUUGJQY-DEB63437 
+      user: PEDROGEROLIN
+      password: LbgSvj@12_Snowflake
+      role: SYSADMIN
+      warehouse: COMPUTE_WH
+      database: FISIOVET
+      schema: FISIOVET

@@ -31,4 +31,4 @@
         Cliente_Ultimavenda AS UltimaVenda,
         Cliente_UltimoacessoaoSimplesPet AS UltimoAcessoSimplesPet,
         Cliente_Tags AS Tags
-    FROM `gerolingcp.FisioVet_External.clients_animals`
+    FROM {{ source('FisioVet_External','clients_animals')}}

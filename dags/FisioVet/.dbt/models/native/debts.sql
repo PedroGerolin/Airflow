@@ -27,4 +27,4 @@
         Documento_NF AS DocumentoNF,
         Observacao,
         date
-    FROM `gerolingcp.FisioVet_External.debts` 
+    FROM {{ source('FisioVet_External','debts')}} 

@@ -118,6 +118,21 @@ def fisiovet_dag():
         sales_transfer() 
         debts_transfer()
 
+    dbt_source_freshness = BashOperator(
+            task_id='dbt_source_freshness',
+            bash_command=f'dbt source freshness --profiles-dir {default_args["DBT_PROJECT_DIR"]} --project-dir {default_args["DBT_PROJECT_DIR"]}'
+        )
+    #dbt source freshness --profiles-dir '/airflow/dags/FisioVet/.dbt' --project-dir '/airflow/dags/FisioVet/.dbt'
+    dbt_test = BashOperator(
+            task_id='dbt_test',
+            bash_command=f'dbt test --profiles-dir {default_args["DBT_PROJECT_DIR"]} --project-dir {default_args["DBT_PROJECT_DIR"]}'
+        )
+    
+    dbt_documentation = BashOperator(
+            task_id='dbt_documentation',
+            bash_command=f'dbt docs generate --profiles-dir {default_args["DBT_PROJECT_DIR"]} --project-dir {default_args["DBT_PROJECT_DIR"]}'
+        )
+
     dbt_run = BashOperator(
              task_id='dbt_run',
              bash_command=f'dbt run --profiles-dir {default_args["DBT_PROJECT_DIR"]} --project-dir {default_args["DBT_PROJECT_DIR"]}'
@@ -131,6 +146,9 @@ def fisiovet_dag():
     Label("Download dos arquivos") >> fisiovet_downloader() >> \
     Label("Buscar e Normalizar arquivos") >> file_transformation() >> \
     Label("Envio para GCS") >> file_transfer() >> \
+    Label("Checa o carregamento dos dados da origem") >> dbt_source_freshness >> \
+    Label("Executa os testes do DBT") >> dbt_test >> \
+    Label("Gera a documentação do DBT") >> dbt_documentation >> \
     Label("Executa o DBT") >> dbt_run >> \
     end_task
 
