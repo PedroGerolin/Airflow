@@ -7,10 +7,21 @@
 }}
     SELECT 
         Funcionario
-        ,FORMAT_DATE('%Y-%m-01', DataHora) AS AnoMes
+        {% if target.name == 'prod_bigquery' %}
+            ,FORMAT_DATE('%Y-%m-01', DataHora) AS AnoMes
+        {% else %}
+            ,TO_CHAR(DataHora, 'YYYY-MM-01') AS AnoMes
+        {% endif %}  
         ,COUNT(Venda) AS Atendimentos
         ,SUM(Liquido) AS ValorLiquido
     FROM {{ ref('sales') }} 
     GROUP BY 
         Funcionario
-        ,FORMAT_DATE('%Y-%m-01', DataHora)
+        {% if target.name == 'prod_bigquery' %}
+            ,FORMAT_DATE('%Y-%m-01', DataHora)
+        {% else %}
+            ,TO_CHAR(DataHora, 'YYYY-MM-01')
+        {% endif %}    
+        
+        
+        

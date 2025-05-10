@@ -5,3 +5,14 @@ models:
     description: Cadastro de Clientes
     schema: FisioVet
     materialized: table
+    columns:
+      - name: Codigo
+        description: Codigo do cliente
+        tests:
+          - unique
+          - not_null
+      - name: Nome
+        description: Nome do cliente
+        tests:
+          - not_null
+          - string_not_empty
