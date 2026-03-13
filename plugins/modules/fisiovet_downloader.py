@@ -50,11 +50,16 @@ class fisioVetDownloader:
         time.sleep(2)
 
     def export_clients(self):
-        btn_export = self.driver.find_element(By.ID, "p__btn_relatorio")
+        btn_export = self.driver.find_element(By.XPATH, "//button[.//small[contains(text(), 'Relatórios')]]")
         btn_export.click()
+        time.sleep(2)
 
-        btn_csvAnimalCliente = self.driver.find_element(By.LINK_TEXT, "Exportar clientes e animais para CSV")
+        btn_csvAnimalCliente = self.driver.find_element(By.XPATH, "//button[.//p[contains(text(), 'Pessoas e animais')]]")
         btn_csvAnimalCliente.click()
+        time.sleep(2)
+
+        btn_gerarPlaninha = self.driver.find_element(By.XPATH, "//button[.//p[contains(text(), 'Gerar planilha')]]")
+        btn_gerarPlaninha.click()
         time.sleep(2)
 
     def enter_sales_page(self):
@@ -62,7 +67,7 @@ class fisioVetDownloader:
         time.sleep(2)
 
     def export_sales(self):
-        dataInicial = '01/02/2025'#(datetime.date.today().replace(day=1)-timedelta(month=1)).replace(day=1).strftime("%d/%m/%Y")
+        dataInicial = '01/09/2025'##(datetime.date.today().replace(day=1)-timedelta(days=1)).replace(day=1).strftime("%d/%m/%Y")
         dataFinal = datetime.date.today().strftime("%d/%m/%Y")
         
         txtData = self.driver.find_element(By.ID, "p__ven_dat_data")
