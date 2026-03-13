@@ -58,7 +58,7 @@ def fisiovet_dag():
         def clients_animals_file_transformation():
             file = FileTransformer(
                 file_path=default_args['fisiovet_file_path'],
-                file_name='Animais_e_Clientes.csv',
+                file_name='clientes.csv',
                 new_file_name=f'clients_animals_full.csv')
             file.header_normalize(delete_original_file=True)
         
