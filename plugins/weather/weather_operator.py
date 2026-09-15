@@ -1,9 +1,9 @@
 from datetime import datetime, timedelta
 from pathlib import Path
 from airflow.models import BaseOperator 
-from hook.weather_hook import WeatherHook
-from modules.converter import Converter
-from modules.transfer import TransferFile
+from weather.weather_hook import WeatherHook
+from common.converter import Converter
+from common.transfer import TransferFile
 from airflow.macros import ds_add 
 import os
 

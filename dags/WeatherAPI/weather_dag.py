@@ -1,11 +1,11 @@
 from airflow import DAG 
 import pendulum
-from operators.weather_operator import WeatherOperator
+from weather.weather_operator import WeatherOperator
 from airflow.operators.empty import EmptyOperator
 from airflow.operators.bash import BashOperator
-from modules.converter import Converter
-from modules.transfer import TransferFile 
-from modules.exporter import Exporter
+from common.converter import Converter
+from common.transfer import TransferFile
+from common.exporter import Exporter
 from airflow.decorators import task
 from airflow.utils.edgemodifier import Label
 from airflow.operators.python import get_current_context

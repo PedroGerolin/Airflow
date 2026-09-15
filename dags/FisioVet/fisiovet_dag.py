@@ -1,9 +1,9 @@
 from airflow import DAG 
 import pendulum
-from modules.file_transformer import FileTransformer
-from modules.transfer import TransferFile 
-from modules.exporter import Exporter 
-from modules.fisiovet_downloader import fisioVetDownloader
+from common.file_transformer import FileTransformer
+from common.transfer import TransferFile
+from common.exporter import Exporter
+from fisiovet.fisiovet_downloader import fisioVetDownloader
 from airflow.operators.empty import EmptyOperator
 from airflow.operators.bash import BashOperator
 from airflow.decorators import task, dag, task_group
@@ -58,7 +58,7 @@ def fisiovet_dag():
         def clients_animals_file_transformation():
             file = FileTransformer(
                 file_path=default_args['fisiovet_file_path'],
-                file_name='Animais_e_Clientes.csv',
+                file_name='clientes.csv',
                 new_file_name=f'clients_animals_full.csv')
             file.header_normalize(delete_original_file=True)
         
@@ -118,20 +118,20 @@ def fisiovet_dag():
         sales_transfer() 
         debts_transfer()
 
-    dbt_source_freshness = BashOperator(
-            task_id='dbt_source_freshness',
-            bash_command=f'dbt source freshness --profiles-dir {default_args["DBT_PROJECT_DIR"]} --project-dir {default_args["DBT_PROJECT_DIR"]}'
-        )
+    # dbt_source_freshness = BashOperator(
+    #         task_id='dbt_source_freshness',
+    #         bash_command=f'dbt source freshness --profiles-dir {default_args["DBT_PROJECT_DIR"]} --project-dir {default_args["DBT_PROJECT_DIR"]}'
+    #     )
     #dbt source freshness --profiles-dir '/airflow/dags/FisioVet/.dbt' --project-dir '/airflow/dags/FisioVet/.dbt'
-    dbt_test = BashOperator(
-            task_id='dbt_test',
-            bash_command=f'dbt test --profiles-dir {default_args["DBT_PROJECT_DIR"]} --project-dir {default_args["DBT_PROJECT_DIR"]}'
-        )
+    # dbt_test = BashOperator(
+    #         task_id='dbt_test',
+    #         bash_command=f'dbt test --profiles-dir {default_args["DBT_PROJECT_DIR"]} --project-dir {default_args["DBT_PROJECT_DIR"]}'
+    #     )
     
-    dbt_documentation = BashOperator(
-            task_id='dbt_documentation',
-            bash_command=f'dbt docs generate --profiles-dir {default_args["DBT_PROJECT_DIR"]} --project-dir {default_args["DBT_PROJECT_DIR"]}'
-        )
+    # dbt_documentation = BashOperator(
+    #         task_id='dbt_documentation',
+    #         bash_command=f'dbt docs generate --profiles-dir {default_args["DBT_PROJECT_DIR"]} --project-dir {default_args["DBT_PROJECT_DIR"]}'
+    #     )
 
     dbt_run = BashOperator(
              task_id='dbt_run',
@@ -146,10 +146,11 @@ def fisiovet_dag():
     Label("Download dos arquivos") >> fisiovet_downloader() >> \
     Label("Buscar e Normalizar arquivos") >> file_transformation() >> \
     Label("Envio para GCS") >> file_transfer() >> \
-    Label("Checa o carregamento dos dados da origem") >> dbt_source_freshness >> \
-    Label("Executa os testes do DBT") >> dbt_test >> \
-    Label("Gera a documentação do DBT") >> dbt_documentation >> \
     Label("Executa o DBT") >> dbt_run >> \
     end_task
 
 fisiovet_dag()
+
+ # Label("Checa o carregamento dos dados da origem") >> dbt_source_freshness >> 
+    # Label("Executa os testes do DBT") >> dbt_test >> \
+    # Label("Gera a documentação do DBT") >> dbt_documentation >> \

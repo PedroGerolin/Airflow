@@ -1,7 +1,7 @@
 import pendulum
 from airflow.operators.empty import EmptyOperator
 from airflow.decorators import task, dag
-from modules.fisiovet_downloader import fisioVetDownloader
+from fisiovet.fisiovet_downloader import fisioVetDownloader
 
 @dag(
         dag_id="fisiovet_scrap",

@@ -25,7 +25,7 @@
         {% endif %} 
     FROM {{ ref('sales') }} S
     JOIN {{ ref('clients') }} C 
-        ON S.CodigoCliente = C.Codigo 
+        ON CAST(S.CodigoCliente AS STRING) = CAST(C.Codigo AS STRING)
     WHERE 
         date > '2023-01-01'
     GROUP BY 

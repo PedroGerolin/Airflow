@@ -11,4 +11,6 @@ credential/
 Airflow_DBT
 dags/FisioVet/.dbt/target
 dags/FisioVet/.dbt/profiles.yml
-
+dags/WeatherAPI/.dbt/target
+dags/WeatherAPI/.dbt/profiles.yml
+.venv

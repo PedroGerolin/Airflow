@@ -15,7 +15,7 @@
         Animal_Nascimento AS DataNascimento,
         Animal_Sexo AS Sexo,
         Animal_Pedigree AS Pedigree,
-        Animal_Chip AS Chip,
+        Animal_Microchip AS Chip,
         Animal_Tags AS Tags,
         Animal_Status AS Status,
         Animal_Datadeinclusao AS DataInclusao,

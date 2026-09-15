@@ -1,8 +1,12 @@
 import time
 import datetime 
 from datetime import timedelta
+from httpcore import TimeoutException
 from selenium import webdriver
 from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.common.keys import Keys
 from airflow.models import Connection
 
 class fisioVetDownloader:
@@ -10,7 +14,7 @@ class fisioVetDownloader:
     def __init__(self):
         default_directory = "/opt/airflow/files/FisioVet"
         options = webdriver.ChromeOptions()
-        options.add_argument("--headless")
+        options.add_argument("--headless=new")
         options.add_argument("--no-sandbox")
         options.add_argument("--disable-dev-shm-usage")
         options.add_argument("--disable-gpu")
@@ -29,40 +33,67 @@ class fisioVetDownloader:
          }
         options.add_experimental_option("prefs", prefs)
         self.driver = webdriver.Chrome(options=options)
+        # self.driver.execute_cdp_cmd("Page.setDownloadBehavior", {
+        #     "behavior": "allow",
+        #     "downloadPath": default_directory
+        # })
         self.conn = Connection.get_connection_from_secrets("fisioVet")
     
     def iniciar_navegador(self):
         self.driver.get(self.conn.host)
 
     def realizar_login(self):
-        txt_login = self.driver.find_element(By.ID, "l_usu_var_email")
+        wait = WebDriverWait(self.driver, 20)
+        
+        txt_login = wait.until(EC.visibility_of_element_located((By.ID, "l_usu_var_email")))
         txt_password = self.driver.find_element(By.ID, "l_usu_var_senha")
-        btn_login = self.driver.find_element(By.ID, "btn_login")
 
+        txt_login.clear()
         txt_login.send_keys(self.conn.login)
+        txt_password.clear()
         txt_password.send_keys(self.conn.password)   
-        btn_login.click()
-        time.sleep(5)
+        txt_password.send_keys(Keys.ENTER)
+        
+        wait.until(EC.url_changes("https://app.simples.vet/login/login.php"))
 
     def enter_clients_page(self):
-        lnk_clients = self.driver.find_element(By.LINK_TEXT, "Clientes")
-        lnk_clients.click()
-        time.sleep(2)
+        wait = WebDriverWait(self.driver, 20)
+        xpath_clientes = "//*[contains(text(), 'Clientes')] | //a[contains(., 'Clientes')]"
+        
+        lnk_clients = wait.until(EC.presence_of_element_located((By.XPATH, xpath_clientes)))
+        self.driver.execute_script("arguments[0].click();", lnk_clients)
 
     def export_clients(self):
-        btn_export = self.driver.find_element(By.ID, "p__btn_relatorio")
-        btn_export.click()
+        wait = WebDriverWait(self.driver, 20)
+        
+        btn_export = wait.until(
+            EC.presence_of_element_located((By.XPATH, "//button[.//small[contains(text(), 'Relatórios')]]"))
+        )
+        self.driver.execute_script("arguments[0].click();", btn_export)
 
-        btn_csvAnimalCliente = self.driver.find_element(By.LINK_TEXT, "Exportar clientes e animais para CSV")
-        btn_csvAnimalCliente.click()
-        time.sleep(2)
+        btn_csvAnimalCliente = wait.until(
+            EC.presence_of_element_located((By.XPATH, "//button[.//p[contains(text(), 'Pessoas e animais')]]"))
+        )
+        self.driver.execute_script("arguments[0].click();", btn_csvAnimalCliente)
+
+        btn_gerarPlaninha = wait.until(
+            EC.presence_of_element_located((By.XPATH, "//button[.//p[contains(text(), 'Gerar planilha')]]"))
+        )
+        self.driver.execute_script("arguments[0].click();", btn_gerarPlaninha)
+        
+        time.sleep(5)
 
     def enter_sales_page(self):
         self.driver.get("https://app.simples.vet/principal/venda/venda.php")
         time.sleep(2)
 
     def export_sales(self):
-        dataInicial = '01/02/2025'#(datetime.date.today().replace(day=1)-timedelta(month=1)).replace(day=1).strftime("%d/%m/%Y")
+        # --- OPÇÃO 1: Primeiro dia do MÊS PASSADO (Ex: se hoje é Julho, pega 01/06) ---
+        dataInicial = (datetime.date.today().replace(day=1) - timedelta(days=1)).replace(day=1).strftime("%d/%m/%Y")
+        
+        # --- OPÇÃO 2: Primeiro dia do MÊS RETRASADO (Ex: se hoje é Julho, pega 01/05) ---
+        # dataInicial = ((datetime.date.today().replace(day=1) - timedelta(days=1)).replace(day=1) - timedelta(days=1)).replace(day=1).strftime("%d/%m/%Y")
+        
         dataFinal = datetime.date.today().strftime("%d/%m/%Y")
         
         txtData = self.driver.find_element(By.ID, "p__ven_dat_data")
