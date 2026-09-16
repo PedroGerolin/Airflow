@@ -110,6 +110,26 @@ Schedule semanal (`0 0 * * 1`) com `catchup=True`.
   (`.gitignore`) e não commitam `target/` (build artifact) — manter essa convenção em
   qualquer novo pipeline/projeto dbt adicionado ao repo.
 
+## Execução diária automática (sem manter o Docker ligado o dia todo)
+
+Existe uma tarefa agendada do Windows, `Airflow_FisioVet_Daily` (criada via
+`scripts/create_scheduled_task.ps1`, precisa rodar como Administrador), que todo dia às
+06:00: sobe o `docker-compose`, dispara a DAG `fisiovet` com um `run_id` previsível
+(`scheduled_daily__<timestamp>`), espera terminar (via `airflow tasks states-for-dag-run`,
+timeout de 30 min) e derruba os containers de novo — `scripts/run_daily_pipeline.ps1` é
+quem faz isso, com log em `logs/daily_pipeline.log`.
+
+A tarefa tem `WakeToRun` habilitado, e os "temporizadores de ativação" do Windows foram
+ligados via `powercfg` (`SUB_SLEEP RTCWAKE`, AC e DC) — juntos, isso permite que o
+Agendador **acorde o notebook da suspensão** só pra rodar a tarefa. Só funciona a partir de
+suspensão (sleep), não de desligado por completo.
+
+**Cuidado ao editar `run_daily_pipeline.ps1`**: nunca usar `2>&1` ou `2>$null` em chamadas
+a `docker`/`docker compose` — no PowerShell 5.1, isso embrulha a saída num `ErrorRecord` e,
+com `$ErrorActionPreference = "Stop"`, interrompe o script mesmo quando o comando teve
+sucesso (foi exatamente o que quebrou no primeiro teste: o aviso inofensivo
+`AIRFLOW_UID not set` do `docker compose up` foi tratado como erro fatal).
+
 ## Ambiente de desenvolvimento
 
 - `docker-compose up` sobe Postgres + Redis + webserver + scheduler + worker + triggerer
