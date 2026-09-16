@@ -83,6 +83,10 @@ class fisioVetDownloader:
         
         time.sleep(5)
 
+        btn_gerarPlaninha = self.driver.find_element(By.XPATH, "//button[.//p[contains(text(), 'Gerar planilha')]]")
+        btn_gerarPlaninha.click()
+        time.sleep(2)
+
     def enter_sales_page(self):
         self.driver.get("https://app.simples.vet/principal/venda/venda.php")
         time.sleep(2)
