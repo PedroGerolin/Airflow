@@ -2,8 +2,9 @@
 
 Projeto Airflow (CeleryExecutor, `apache/airflow:2.10.3-python3.12`) que roda dois pipelines
 independentes na mesma instância: **FisioVet** (scraping via Selenium) e **WeatherAPI**
-(consumo de API pública). Ambos seguem o padrão Selenium/API → CSV local → GCS → dbt → BigQuery
-(FisioVet também suporta Snowflake como target alternativo do dbt).
+(consumo de API pública). Ambos seguem o padrão Selenium/API → CSV local → GCS → dbt → warehouse.
+FisioVet materializa em **BigQuery e Snowflake em paralelo, a cada execução** (não é mais um
+target alternativo — os dois bancos ficam sempre espelhados). WeatherAPI usa só BigQuery.
 
 ## Estrutura do repositório
 
@@ -13,7 +14,9 @@ dags/
     fisiovet_dag.py       # DAG principal (produção) — TaskFlow API
     fisiovet_export.py    # variante reduzida, só download (teste manual)
     fisiovet_test.py      # skeleton para testar o `dbt run` isolado
-    .dbt/                 # projeto dbt do FisioVet (profile: bigquery + snowflake)
+    .dbt/                 # projeto dbt do FisioVet — profile único 'fiosiovet' com dois
+                           # targets (prod_bigquery, dev_snowflake)
+    .dbt/snowflake_setup/ # scripts DDL versionados p/ recriar a infra Snowflake do zero
   WeatherAPI/
     weather_dag.py         # DAG principal — estilo `with DAG()` clássico + alguns @task
     .dbt/                  # projeto dbt do WeatherAPI (profile: bigquery apenas)
@@ -38,14 +41,37 @@ Airflow adiciona `plugins/` ao `sys.path`, então os subpacotes são importados 
    Airflow Connection `fisioVet`, não hardcoded) e baixa `clientes.csv` e `Vendas.csv`.
 2. `file_transformation` — `FileTransformer` normaliza encoding/cabeçalho e separa por data.
 3. `file_transfer` — `TransferFile` sobe os CSVs para o bucket GCS `gerolin_etl`.
-4. `dbt_run` (BashOperator) — materializa camadas `native` (clients, animals, sales, debts) e
-   `analytics` (faturamento por cliente/funcionário, resultado operacional) no BigQuery.
+4. `dbt_run_bigquery` e `dbt_run_snowflake` (dois `BashOperator`, **em paralelo** — ambos saem
+   de `file_transfer` e convergem em `end_task`) — materializam camadas `native` (clients,
+   animals, sales, debts) e `analytics` (faturamento por cliente/funcionário, resultado
+   operacional) em cada warehouse. Por serem independentes (os dois leem do mesmo GCS, não um
+   do outro), uma falha num não impede a tentativa no outro.
 5. `dbt test` / `dbt source freshness` / `dbt docs generate` estão comentados no código —
    não rodam em produção hoje.
 
-O dbt do FisioVet tem dois targets (`prod_bigquery` e `dev_snowflake`) com blocos Jinja
-`{% if target.name == ... %}` alternando SQL (BigQuery vs Snowflake). A DAG não passa
-`--target`, então roda sempre contra o target padrão do `profiles.yml`.
+### dbt multi-warehouse (BigQuery + Snowflake)
+
+`profiles.yml` tem **um profile só** (`fiosiovet`, batendo com `profile:` do `dbt_project.yml`)
+com dois outputs: `prod_bigquery` (default) e `dev_snowflake`. A DAG passa `--target` explícito
+em cada task. Os modelos usam `{% if target.name == 'prod_bigquery' %} ... {% else %} ... {% endif %}`
+para alternar sintaxe (`FORMAT_DATE` vs `TO_CHAR`, `FLOAT64` vs `FLOAT`, `SAFE_CAST(...FORMAT...)`
+vs `TRY_TO_DATE`/`TO_DATE`).
+
+**As tabelas externas de BigQuery e Snowflake sobre os mesmos CSVs do GCS não são
+estruturalmente idênticas em tipagem** — isso já causou bugs reais (setembro/2026):
+- BigQuery tipa alguns campos como numérico direto na definição da external table
+  (`sales.Venda/Codigo`, `debts.Valor/Desconto/Multa/Juros/Valorpago`); ao recriar o
+  equivalente no Snowflake (`dags/FisioVet/.dbt/snowflake_setup/04_external_tables.sql`),
+  replicamos essa tipagem — **exceto** `sales.Numero`, que o BigQuery declara `INTEGER` mas
+  contém valores como `"SN"` (sem número); mantido `VARCHAR` no Snowflake (não é usado em
+  nenhum model dbt de qualquer forma).
+- BigQuery converte string vazia em `NULL` automaticamente ao carregar CSV num campo
+  numérico; Snowflake **não** — dá erro (`Failed to cast variant value "" to REAL`). Por isso
+  os campos numéricos da external table do Snowflake usam `NULLIF(value:cN,'')` antes do cast,
+  direto na definição da tabela (não é workaround no dbt).
+- Se algum dia recriar essas external tables do zero, siga a ordem numerada em
+  `dags/FisioVet/.dbt/snowflake_setup/README.md` — inclui o passo manual de conceder acesso
+  GCS à service account que o Snowflake gera (muda a cada conta/trial).
 
 **Gap conhecido**: `fisioVetDownloader.enter_debts_page()` existe mas nenhuma task chama —
 o arquivo `contas-a-pagar.csv` que a DAG transforma/transfere precisa ser obtido manualmente.
@@ -67,9 +93,17 @@ Schedule semanal (`0 0 * * 1`) com `catchup=True`.
   diretamente** no operator em vez de retorná-lo como task — bypassa retries/XCom/logging
   nativos do Airflow. Um refactor futuro deveria trocar isso por hooks diretos ou por
   operators de fato encadeados na DAG.
-- **Credenciais do Snowflake em texto puro** em `dags/FisioVet/.dbt/profiles.yml` (gitignored,
-  não commitado, mas exposto em disco). Não hardcodar segredos em novos arquivos — usar
-  Airflow Connections (como já é feito para `fisioVet` e `weather_api`) ou `env_var()` do dbt.
+- **Senha do Snowflake nunca em texto puro** — `profiles.yml` usa
+  `{{ env_var('SNOWFLAKE_PASSWORD') }}`. A variável precisa existir tanto no host (pro MCP/dbt
+  local) quanto no ambiente dos containers Airflow (`docker-compose.yaml` repassa
+  `SNOWFLAKE_PASSWORD: ${SNOWFLAKE_PASSWORD:-}` do host pro container — sem isso, `dbt_run_snowflake`
+  falha na DAG). Conta/usuário/warehouse/role no `profiles.yml` não são segredo, só a senha.
+  Não hardcodar segredos em novos arquivos — usar Airflow Connections (como já é feito para
+  `fisioVet` e `weather_api`) ou `env_var()` do dbt.
+- **`dags/FisioVet/.dbt/profiles.yml` já foi apagado sem querer uma vez** por um
+  `git filter-repo` (ele não é rastreado pelo git — é gitignored — e o filter-repo reseta a
+  working tree). Se o arquivo sumir do disco, recriar com o conteúdo documentado acima; não é
+  um bug do dbt.
 - **Testes de dbt praticamente desligados**: só `clients.yml` (FisioVet) tem testes
   `unique`/`not_null` configurados e `dbt test` está comentado na DAG principal.
 - Ambos os projetos dbt commitam `profiles.yml` fora do controle de versão
@@ -80,7 +114,20 @@ Schedule semanal (`0 0 * * 1`) com `catchup=True`.
 
 - `docker-compose up` sobe Postgres + Redis + webserver + scheduler + worker + triggerer
   (usuário/senha padrão `airflow`/`airflow`, sem `.env` no repo).
+- **`SNOWFLAKE_PASSWORD` precisa estar definida como variável de ambiente do Windows** antes
+  de subir o compose (`docker-compose up`/`up -d`), senão `dbt_run_snowflake` falha na DAG.
+  Definir com `[System.Environment]::SetEnvironmentVariable("SNOWFLAKE_PASSWORD", "...", "User")`
+  e reabrir o terminal/VS Code pra pegar a variável nova.
 - Rebuild da imagem custom (Chromium para Selenium + `config/requirements.txt`):
   `docker-compose build`.
 - Não há `airflow.cfg` no repo — configuração via variáveis de ambiente no
   `docker-compose.yaml`.
+- Testar `dbt run` fora da DAG: local via `.venv` (`--profiles-dir`/`--project-dir` apontando
+  pra `dags/FisioVet/.dbt`, `--target dev_snowflake` funciona direto do Windows) ou dentro do
+  container pro BigQuery (o `keyfile` do `profiles.yml` é um caminho `/opt/airflow/...` que só
+  existe lá): `docker compose exec airflow-webserver dbt run --profiles-dir /opt/airflow/dags/FisioVet/.dbt --project-dir /opt/airflow/dags/FisioVet/.dbt`.
+  No Git Bash, prefixar com `MSYS_NO_PATHCONV=1` pra esses caminhos `/opt/...` não serem
+  reescritos como caminho do Windows.
+- Se trocar de target/profile entre execuções locais, `rm -rf dags/FisioVet/.dbt/target` antes
+  — o cache de partial-parse do dbt não invalida sozinho e gera erro tipo
+  `KeyError: 'dbt_bigquery://macros/adapters.sql'`.

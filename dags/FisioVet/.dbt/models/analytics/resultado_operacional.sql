@@ -1,11 +1,10 @@
-{% if target.name == 'prod_bigquery' %}
-  {{ 
-      config(
-          materialized='table',
-          schema='Analytics' 
-      ) 
-  }}
-  WITH Receita AS 
+{{
+    config(
+        materialized='table',
+        schema='Analytics'
+    )
+}}
+  WITH Receita AS
   (
     SELECT
       {% if target.name == 'prod_bigquery' %}
@@ -72,7 +71,7 @@
           ROUND(SUM(CAST(ValorPago AS FLOAT64)),2) AS TotalPago
       {% else %}
           ROUND(SUM(CAST(ValorPago AS FLOAT)),2) AS TotalPago
-      {% endif %} 
+      {% endif %}
     FROM {{ ref('debts') }}  D
     JOIN {{ source('FisioVet','debts_types')}} DT
       ON D.Categoria = DT.CategoriaDebito
@@ -98,7 +97,7 @@
           ROUND(SUM(CAST(D.ValorPago AS FLOAT64)),2) AS TotalPago
       {% else %}
           ROUND(SUM(CAST(D.ValorPago AS FLOAT)),2) AS TotalPago
-      {% endif %} 
+      {% endif %}
     FROM {{ ref('debts') }}  D
     JOIN {{ source('FisioVet','debts_types')}} DT
       ON D.Categoria = DT.CategoriaDebito
@@ -151,10 +150,10 @@
       (R.ValorTotal / R.Atendimentos)
     ,2) AS TicketMedio,
     ROUND(
-      ((IFNULL(CF.TotalPago,0) / (SELECT Atendimentos FROM ReceitaTotal RE WHERE RE.Mes = R.Mes AND RE.Local = R.Local))* R.Atendimentos)
+      ((IFNULL(CF.TotalPago,0) / RT.Atendimentos)* R.Atendimentos)
     ,2) AS CustoFixo,
     ROUND(
-      ((IFNULL(CV.TotalPago,0) / (SELECT Atendimentos FROM ReceitaTotal RE WHERE RE.Mes = R.Mes AND RE.Local = R.Local))* R.Atendimentos)
+      ((IFNULL(CV.TotalPago,0) / RT.Atendimentos)* R.Atendimentos)
     ,2) AS CustoVariavel,
     IFNULL(CC.Comissao,0) AS CustoComissoes,
     ROUND(
@@ -164,9 +163,12 @@
       (IFNULL(CC.Comissao,0) / R.ValorTotal )  * 100
     ,2) AS PorcentagemMediaComissoes,
     ROUND(
-      (((R.ValorTotal - IFNULL(CF.TotalPago,0) - IFNULL(CV.TotalPago,0) - IFNULL(CC.Comissao,0)) / (SELECT Atendimentos FROM ReceitaTotal RE WHERE RE.Mes = R.Mes AND RE.Local = R.Local))* R.Atendimentos)
+      (((R.ValorTotal - IFNULL(CF.TotalPago,0) - IFNULL(CV.TotalPago,0) - IFNULL(CC.Comissao,0)) / RT.Atendimentos)* R.Atendimentos)
     ,2) AS LucroLiquido
   FROM Receita R
+  LEFT JOIN ReceitaTotal RT
+    ON R.Mes = RT.Mes
+    AND R.Local = RT.Local
   LEFT JOIN CustoFixo CF
     ON R.Mes = CF.Mes
     AND R.Local = CF.Local
@@ -177,4 +179,3 @@
     ON R.Mes = CC.Mes
     AND R.Local = CC.Local
     AND R.Funcionario = CC.Funcionario
-{% endif %} 

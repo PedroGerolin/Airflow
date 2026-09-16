@@ -133,21 +133,29 @@ def fisiovet_dag():
     #         bash_command=f'dbt docs generate --profiles-dir {default_args["DBT_PROJECT_DIR"]} --project-dir {default_args["DBT_PROJECT_DIR"]}'
     #     )
 
-    dbt_run = BashOperator(
-             task_id='dbt_run',
-             bash_command=f'dbt run --profiles-dir {default_args["DBT_PROJECT_DIR"]} --project-dir {default_args["DBT_PROJECT_DIR"]}'
+    dbt_run_bigquery = BashOperator(
+             task_id='dbt_run_bigquery',
+             bash_command=f'dbt run --target prod_bigquery --profiles-dir {default_args["DBT_PROJECT_DIR"]} --project-dir {default_args["DBT_PROJECT_DIR"]}'
          )
-    
+
+    dbt_run_snowflake = BashOperator(
+             task_id='dbt_run_snowflake',
+             bash_command=f'dbt run --target dev_snowflake --profiles-dir {default_args["DBT_PROJECT_DIR"]} --project-dir {default_args["DBT_PROJECT_DIR"]}'
+         )
+
     end_task = EmptyOperator(
             task_id = 'end_task'
-        )   
-    
+        )
+
+    file_transfer_group = file_transfer()
+
     start_task >> \
     Label("Download dos arquivos") >> fisiovet_downloader() >> \
     Label("Buscar e Normalizar arquivos") >> file_transformation() >> \
-    Label("Envio para GCS") >> file_transfer() >> \
-    Label("Executa o DBT") >> dbt_run >> \
-    end_task
+    Label("Envio para GCS") >> file_transfer_group
+
+    file_transfer_group >> Label("Executa o DBT no BigQuery") >> dbt_run_bigquery >> end_task
+    file_transfer_group >> Label("Executa o DBT no Snowflake") >> dbt_run_snowflake >> end_task
 
 fisiovet_dag()
 
