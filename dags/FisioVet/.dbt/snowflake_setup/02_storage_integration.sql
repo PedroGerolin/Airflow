@@ -29,4 +29,6 @@ DESC STORAGE INTEGRATION gerolin_fisiovet;
 --  "SnowflakeRole" — essa role específica não é necessária, objectViewer basta
 --  já que o Snowflake só precisa LER os arquivos, não escrever.)
 
-USE ROLE SYSADMIN;
+-- ACCOUNTADMIN (e nao SYSADMIN): os schemas foram criados por ACCOUNTADMIN, que e o dono.
+-- Rodar como SYSADMIN falha com 'Insufficient privileges ... CREATE STAGE/TABLE granted on SCHEMA'.
+USE ROLE ACCOUNTADMIN;
