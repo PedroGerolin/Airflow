@@ -7,6 +7,16 @@ macro-paths: ["macros"]
 clean-targets:         # directories to be removed by `dbt clean`
   - "target"
   - "dbt_packages"
+
+# Tabelas externas do Snowflake (AUTO_REFRESH = false) guardam uma lista REGISTRADA de arquivos:
+# arquivos novos no GCS so aparecem depois de um REFRESH. O BigQuery lista os arquivos a cada
+# consulta, entao nao precisa. Sem isso o Snowflake ficava dias atrasado sem nenhum erro
+# (descoberto em 19/09/2026: ultima venda 15/09 no Snowflake vs 17/09 no BigQuery).
+# Renderiza vazio (e o dbt ignora o hook) quando o target nao e Snowflake.
+on-run-start:
+  - "{% if target.type == 'snowflake' %}ALTER EXTERNAL TABLE {{ target.database }}.FISIOVET_EXTERNAL.CLIENTS_ANIMALS REFRESH{% endif %}"
+  - "{% if target.type == 'snowflake' %}ALTER EXTERNAL TABLE {{ target.database }}.FISIOVET_EXTERNAL.SALES REFRESH{% endif %}"
+  - "{% if target.type == 'snowflake' %}ALTER EXTERNAL TABLE {{ target.database }}.FISIOVET_EXTERNAL.DEBTS REFRESH{% endif %}"
 models:
   native:
     +schema: 'native'

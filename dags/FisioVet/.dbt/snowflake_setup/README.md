@@ -105,6 +105,15 @@ direto num worksheet do Snowsight, na ordem dos números do arquivo.
   de `04_external_tables.sql`. Sempre validar o schema real da tabela externa equivalente no
   BigQuery antes de recriar no Snowflake (via `get_table_info` do MCP `toolbox-bigquery`), não
   confiar só em scratch antigo.
+- **`AUTO_REFRESH = false` = arquivos novos ficam invisíveis até um `REFRESH`.** A tabela externa
+  do Snowflake guarda uma lista *registrada* de arquivos do GCS (o BigQuery, ao contrário, lista o
+  bucket a cada consulta). Sem `ALTER EXTERNAL TABLE ... REFRESH`, o Snowflake ficou 2 dias
+  atrasado (última venda 15/09 vs 17/09 no BigQuery) **sem nenhum erro** — o `dbt run` passava
+  normal. Correção: hooks `on-run-start` no `dbt_project.yml` que fazem o REFRESH das 3 tabelas
+  externas quando `target.type == 'snowflake'` (no BigQuery renderizam vazio e o dbt ignora).
+  Lição geral: comparar `MAX(data)` e contagens entre os dois bancos, não só "o run terminou".
+  (Alternativa mais avançada: `AUTO_REFRESH = true` com notificação de eventos GCS via Pub/Sub —
+  é o que o scratch antigo do Snowpipe usava.)
 - Depois de rodar esses 5 scripts, ainda é preciso testar o `dbt run --target dev_snowflake`
   de ponta a ponta — dois bugs reais só apareceram nesse teste (documentados no `CLAUDE.md` da
   raiz do repo, seção "dbt multi-warehouse"): um `{% if %}` sem `{% else %}` que zerava um

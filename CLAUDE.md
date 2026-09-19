@@ -69,6 +69,11 @@ estruturalmente idênticas em tipagem** — isso já causou bugs reais (setembro
   numérico; Snowflake **não** — dá erro (`Failed to cast variant value "" to REAL`). Por isso
   os campos numéricos da external table do Snowflake usam `NULLIF(value:cN,'')` antes do cast,
   direto na definição da tabela (não é workaround no dbt).
+- **As external tables do Snowflake precisam de `REFRESH` pra enxergar arquivos novos**
+  (`AUTO_REFRESH = false`; o BigQuery lista o bucket a cada consulta). Os hooks `on-run-start`
+  do `dbt_project.yml` fazem isso só em `target.type == 'snowflake'`. Sem eles o Snowflake ficou
+  2 dias atrasado sem erro (achado em 19/09/2026). Pra conferir paridade: comparar `MAX(date)` e
+  `COUNT(DISTINCT date)` de `sales` nos dois bancos, não só o status do run.
 - Se algum dia recriar essas external tables do zero, siga a ordem numerada em
   `dags/FisioVet/.dbt/snowflake_setup/README.md` — inclui o passo manual de conceder acesso
   GCS à service account que o Snowflake gera (muda a cada conta/trial).
