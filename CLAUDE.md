@@ -100,6 +100,14 @@ Schedule semanal (`0 0 * * 1`) com `catchup=True`.
   falha na DAG). Conta/usuário/warehouse/role no `profiles.yml` não são segredo, só a senha.
   Não hardcodar segredos em novos arquivos — usar Airflow Connections (como já é feito para
   `fisioVet` e `weather_api`) ou `env_var()` do dbt.
+- **PENDÊNCIA CONHECIDA — `AIRFLOW__CORE__FERNET_KEY` está vazio** no `docker-compose.yaml`.
+  Essa chave é o que o Airflow usa pra criptografar senha de Connection/Variable antes de
+  guardar no Postgres — com ela vazia, **nada é criptografado**: as senhas de `fisioVet` e
+  `weather_api` (cadastradas manualmente pela UI, sem seed no repo) estão em texto puro dentro
+  do banco. Corrigir: gerar uma Fernet key real (`Fernet.generate_key()`), passar via variável
+  de ambiente (mesmo padrão do `SNOWFLAKE_PASSWORD`, nunca hardcoded no `docker-compose.yaml`
+  que é público), e depois reabrir/salvar as Connections existentes na UI pra elas passarem a
+  ser criptografadas de fato (trocar a chave sozinho não recriptografa o que já está salvo).
 - **`dags/FisioVet/.dbt/profiles.yml` já foi apagado sem querer uma vez** por um
   `git filter-repo` (ele não é rastreado pelo git — é gitignored — e o filter-repo reseta a
   working tree). Se o arquivo sumir do disco, recriar com o conteúdo documentado acima; não é
@@ -123,6 +131,16 @@ A tarefa tem `WakeToRun` habilitado, e os "temporizadores de ativação" do Wind
 ligados via `powercfg` (`SUB_SLEEP RTCWAKE`, AC e DC) — juntos, isso permite que o
 Agendador **acorde o notebook da suspensão** só pra rodar a tarefa. Só funciona a partir de
 suspensão (sleep), não de desligado por completo.
+
+**Nem sempre roda às 06:00 em ponto**: o notebook usa Modern Standby e o temporizador de
+ativação não acorda a máquina de verdade (nos logs de energia, a saída da suspensão vem sempre
+com motivo `Lid` — tampa aberta). Na prática a tarefa roda via `StartWhenAvailable` assim que
+o notebook fica disponível (ex: 08:47, 08:52). Aceito pelo usuário. **A tarefa precisa permitir
+execução na bateria** (`-AllowStartIfOnBatteries -DontStopIfGoingOnBatteries` no
+`create_scheduled_task.ps1`): o padrão do `New-ScheduledTaskSettingsSet` é
+`DisallowStartIfOnBatteries=True`, e quando o notebook acordou na bateria (19/09/2026) a
+execução foi contada como perdida, sem catch-up, e a próxima só ficou pra 24h depois. Se
+mexer nisso, conferir com `(Get-ScheduledTask -TaskName Airflow_FisioVet_Daily).Settings`.
 
 **Cuidado ao editar `run_daily_pipeline.ps1`**: nunca usar `2>&1` ou `2>$null` em chamadas
 a `docker`/`docker compose` — no PowerShell 5.1, isso embrulha a saída num `ErrorRecord` e,

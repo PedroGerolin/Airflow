@@ -10,9 +10,15 @@ $action = New-ScheduledTaskAction -Execute "powershell.exe" `
 
 $trigger = New-ScheduledTaskTrigger -Daily -At "06:00"
 
+# -AllowStartIfOnBatteries e -DontStopIfGoingOnBatteries sao obrigatorios: por padrao o
+# New-ScheduledTaskSettingsSet cria a tarefa com DisallowStartIfOnBatteries=True, e uma
+# execucao perdida por estar na bateria NAO faz catch-up (o Agendador ja reprograma pro
+# dia seguinte). Foi exatamente o que aconteceu em 19/09/2026.
 $settings = New-ScheduledTaskSettingsSet `
     -WakeToRun `
     -StartWhenAvailable `
+    -AllowStartIfOnBatteries `
+    -DontStopIfGoingOnBatteries `
     -DontStopOnIdleEnd `
     -ExecutionTimeLimit (New-TimeSpan -Hours 1)
 
