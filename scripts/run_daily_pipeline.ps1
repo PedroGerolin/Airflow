@@ -25,6 +25,16 @@ $DagId = "fisiovet"
 $RunId = "scheduled_daily__" + (Get-Date -Format "yyyy-MM-ddTHH-mm-ss")
 $DockerDesktopExe = "C:\Program Files\Docker\Docker\Docker Desktop.exe"
 
+# O Agendador de Tarefas pode nao herdar variaveis de ambiente de usuario criadas depois do
+# logon. Carrega explicitamente do registro (escopo User) as que o docker-compose repassa
+# aos containers (dbt_run_snowflake autentica no Snowflake com chave + essa passphrase).
+foreach ($name in @('SNOWFLAKE_PRIVATE_KEY_PASSPHRASE')) {
+    if (-not [Environment]::GetEnvironmentVariable($name, 'Process')) {
+        $value = [Environment]::GetEnvironmentVariable($name, 'User')
+        if ($value) { [Environment]::SetEnvironmentVariable($name, $value, 'Process') }
+    }
+}
+
 function Write-Log {
     param([string]$Message)
     $line = "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') - $Message"

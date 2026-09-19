@@ -1,0 +1,23 @@
+# Metabase - projeto docker-compose separado do Airflow de proposito.
+# O Airflow sobe/desce todo dia (scripts/run_daily_pipeline.ps1); o Metabase precisa
+# ficar disponivel sempre que voce quiser abrir um dashboard, entao nao pode fazer
+# parte do mesmo ciclo de vida.
+#
+# Subir:      docker compose up -d   (dentro desta pasta)
+# Acessar:    http://localhost:3000
+# Derrubar:   docker compose down    (os dados ficam no volume metabase-data)
+
+services:
+  metabase:
+    image: metabase/metabase:latest
+    container_name: metabase
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      MB_DB_FILE: /metabase-data/metabase.db
+    volumes:
+      - metabase-data:/metabase-data
+
+volumes:
+  metabase-data:

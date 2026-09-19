@@ -93,13 +93,29 @@ Schedule semanal (`0 0 * * 1`) com `catchup=True`.
   diretamente** no operator em vez de retorná-lo como task — bypassa retries/XCom/logging
   nativos do Airflow. Um refactor futuro deveria trocar isso por hooks diretos ou por
   operators de fato encadeados na DAG.
-- **Senha do Snowflake nunca em texto puro** — `profiles.yml` usa
-  `{{ env_var('SNOWFLAKE_PASSWORD') }}`. A variável precisa existir tanto no host (pro MCP/dbt
-  local) quanto no ambiente dos containers Airflow (`docker-compose.yaml` repassa
-  `SNOWFLAKE_PASSWORD: ${SNOWFLAKE_PASSWORD:-}` do host pro container — sem isso, `dbt_run_snowflake`
-  falha na DAG). Conta/usuário/warehouse/role no `profiles.yml` não são segredo, só a senha.
-  Não hardcodar segredos em novos arquivos — usar Airflow Connections (como já é feito para
-  `fisioVet` e `weather_api`) ou `env_var()` do dbt.
+- **Snowflake autentica por chave (key-pair), não por senha** — desde a fase 3 da Snowflake
+  (ago–out/2026) login só com senha está sendo bloqueado (o banner da conta avisou 22/09/2026).
+  `profiles.yml` usa `private_key_path` (padrão `/opt/airflow/credential/snowflake_rsa_key.p8`,
+  gitignorada; sobrescrevível por `SNOWFLAKE_PRIVATE_KEY_PATH` pra rodar `dbt` local no Windows)
+  e `private_key_passphrase: {{ env_var('SNOWFLAKE_PRIVATE_KEY_PASSPHRASE') }}`. A passphrase é
+  variável de usuário do Windows e o `docker-compose.yaml` a repassa aos containers
+  (`SNOWFLAKE_PRIVATE_KEY_PASSPHRASE: ${SNOWFLAKE_PRIVATE_KEY_PASSPHRASE:-}` — sem isso
+  `dbt_run_snowflake` falha na DAG; `run_daily_pipeline.ps1` a carrega do registro por segurança).
+  Como gerar/registrar chaves: `dags/FisioVet/.dbt/snowflake_setup/README.md`. Conta/usuário/
+  warehouse/role no `profiles.yml` não são segredo. Não hardcodar segredos em novos arquivos —
+  usar Airflow Connections (como já é feito para `fisioVet` e `weather_api`) ou `env_var()` do dbt.
+- **PENDÊNCIA — MCP `toolbox-snowflake` só suporta usuário+senha** (Toolbox v1.11/1.12). Ele ainda
+  usa `PEDROGEROLIN` + `SNOWFLAKE_PASSWORD` (variável do host, não vai mais pros containers) e
+  vai parar de conectar quando a Snowflake exigir MFA/chave pra esse usuário. Ver opções no
+  `snowflake_setup/README.md`. O MCP `toolbox-bigquery` não é afetado.
+- **IAM do GCP e Snowflake documentados em** `gcp_setup/README.md` e
+  `dags/FisioVet/.dbt/snowflake_setup/` — todo comando novo de permissão/infra deve ser
+  registrado lá (o usuário pediu isso explicitamente, pra poder refazer se trocar de conta).
+- **Metabase** (`metabase/docker-compose.yaml`, `http://localhost:3000`) roda num compose
+  **separado** do Airflow de propósito (o Airflow sobe/desce todo dia; o Metabase fica no ar).
+  Conecta com credenciais **só-leitura**: BigQuery via SA `metabase-reader` (chave
+  `credential/metabase-reader.json`) e Snowflake via usuário `METABASE` (`TYPE=SERVICE`, chave
+  `credential/metabase_snowflake_rsa_key.p8`, role `METABASE_READER`).
 - **PENDÊNCIA CONHECIDA — `AIRFLOW__CORE__FERNET_KEY` está vazio** no `docker-compose.yaml`.
   Essa chave é o que o Airflow usa pra criptografar senha de Connection/Variable antes de
   guardar no Postgres — com ela vazia, **nada é criptografado**: as senhas de `fisioVet` e
@@ -152,10 +168,12 @@ sucesso (foi exatamente o que quebrou no primeiro teste: o aviso inofensivo
 
 - `docker-compose up` sobe Postgres + Redis + webserver + scheduler + worker + triggerer
   (usuário/senha padrão `airflow`/`airflow`, sem `.env` no repo).
-- **`SNOWFLAKE_PASSWORD` precisa estar definida como variável de ambiente do Windows** antes
-  de subir o compose (`docker-compose up`/`up -d`), senão `dbt_run_snowflake` falha na DAG.
-  Definir com `[System.Environment]::SetEnvironmentVariable("SNOWFLAKE_PASSWORD", "...", "User")`
-  e reabrir o terminal/VS Code pra pegar a variável nova.
+- **`SNOWFLAKE_PRIVATE_KEY_PASSPHRASE` precisa estar definida como variável de usuário do
+  Windows** antes de subir o compose (`up`/`up -d`), senão `dbt_run_snowflake` falha na DAG.
+  Definir com `[System.Environment]::SetEnvironmentVariable("SNOWFLAKE_PRIVATE_KEY_PASSPHRASE", "...", "User")`.
+  Processos já abertos não a enxergam até reabrir o terminal/VS Code; pra ler na hora a partir
+  de uma sessão antiga: `[Environment]::GetEnvironmentVariable('SNOWFLAKE_PRIVATE_KEY_PASSPHRASE','User')`.
+  (`SNOWFLAKE_PASSWORD` continua existindo só pro MCP do Snowflake, no host.)
 - Rebuild da imagem custom (Chromium para Selenium + `config/requirements.txt`):
   `docker-compose build`.
 - Não há `airflow.cfg` no repo — configuração via variáveis de ambiente no

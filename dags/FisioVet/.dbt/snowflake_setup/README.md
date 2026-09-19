@@ -39,6 +39,40 @@ Nenhum destes arquivos contém segredo. Credenciais de conexão continuam vivend
    existem em nenhum outro lugar** além deste arquivo — não vieram de nenhuma fonte
    automatizada.
 
+6. **`06_metabase_reader.sql`** — role `METABASE_READER` (só `SELECT` nos schemas do dbt) e
+   usuário `METABASE` (`TYPE = SERVICE`, sem senha, autentica por chave). Ver o próprio
+   arquivo pros detalhes (inclusive por que os `FUTURE` grants são obrigatórios).
+
+## Autenticação por chave (key-pair) — obrigatória desde a fase 3 da Snowflake
+
+Desde ago–out/2026 a Snowflake bloqueia login só com senha: usuário humano/`TYPE` nulo passa a
+exigir MFA, `LEGACY_SERVICE` é convertido pra `SERVICE` (que não guarda senha). Programa que
+não pode fazer MFA (dbt, Metabase) precisa de **chave privada**. O banner apareceu na conta em
+19/09/2026 com data 22/09/2026 (a doc pública diz que trials são isentas, mas o aviso valia
+pra esta conta — migramos por precaução).
+
+**Pipeline (dbt) — usuário `PEDROGEROLIN`, chave criptografada com passphrase:**
+```
+# passphrase vem da variavel de usuario SNOWFLAKE_PRIVATE_KEY_PASSPHRASE (nunca em arquivo)
+openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -aes-256-cbc -pass env:SF_KEY_PASS -out credential/snowflake_rsa_key.p8
+openssl pkey -in credential/snowflake_rsa_key.p8 -passin env:SF_KEY_PASS -pubout -out credential/snowflake_rsa_key.pub
+```
+```sql
+ALTER USER PEDROGEROLIN SET RSA_PUBLIC_KEY='<corpo base64 da chave publica>';
+```
+`profiles.yml` usa `private_key_path` (padrão `/opt/airflow/credential/snowflake_rsa_key.p8`,
+sobrescrevível por `SNOWFLAKE_PRIVATE_KEY_PATH` pra rodar local no Windows) e
+`private_key_passphrase` (`SNOWFLAKE_PRIVATE_KEY_PASSPHRASE`, repassada pelo `docker-compose.yaml`).
+
+**Metabase — usuário `METABASE`, chave SEM criptografia** (`credential/metabase_snowflake_rsa_key.p8`;
+o Metabase só aceita "RSA private key (PEM)", sem passphrase). Risco contido: é chave de usuário
+só-leitura, em pasta gitignorada. Mesmo `openssl genpkey`, sem `-aes-256-cbc`/`-pass`.
+
+**Pendência — MCP `toolbox-snowflake`:** o MCP Toolbox (v1.11/1.12) só suporta usuário+senha
+(doc atualizada em 17/09/2026). Quando a Snowflake passar a exigir MFA/chave pro `PEDROGEROLIN`,
+esse MCP para de conectar. Alternativas: `Snowflake-Labs/mcp` (suporta chave, repo deprecated),
+aguardar suporte no Toolbox, ou rodar SQL de administração via script Python com o conector.
+
 ## O que ficou de fora de propósito
 
 O setup original (arquivo `Fisiovet - Snowflake.txt`, fora do repo) também tinha uma
