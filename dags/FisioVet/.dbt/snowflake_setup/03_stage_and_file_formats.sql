@@ -2,7 +2,9 @@
 -- Reaproveitado de scratch pessoal (Fisiovet.txt), versionado em 2026-09-16.
 -- Pré-requisito: 02_storage_integration.sql já rodado, incluindo o grant de IAM no GCP.
 
-USE ROLE SYSADMIN;
+-- ACCOUNTADMIN (e nao SYSADMIN): os schemas foram criados por ACCOUNTADMIN, que e o dono.
+-- Rodar como SYSADMIN falha com 'Insufficient privileges ... CREATE STAGE/TABLE granted on SCHEMA'.
+USE ROLE ACCOUNTADMIN;
 USE SCHEMA FISIOVET.FISIOVET_EXTERNAL;
 
 CREATE STAGE IF NOT EXISTS gerolin_fisiovet

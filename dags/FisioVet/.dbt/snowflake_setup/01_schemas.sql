@@ -2,6 +2,8 @@
 -- Reaproveitado de scratch pessoal (Fisiovet.txt), versionado em 2026-09-16.
 -- Idempotente: seguro rodar de novo numa conta já configurada.
 
+USE ROLE ACCOUNTADMIN;
+
 CREATE DATABASE IF NOT EXISTS FISIOVET;
 
 USE DATABASE FISIOVET;

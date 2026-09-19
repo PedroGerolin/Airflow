@@ -28,7 +28,9 @@
 -- da external table — não é um workaround no dbt, é equivalente ao comportamento
 -- nativo do BigQuery.
 
-USE ROLE SYSADMIN;
+-- ACCOUNTADMIN (e nao SYSADMIN): os schemas foram criados por ACCOUNTADMIN, que e o dono.
+-- Rodar como SYSADMIN falha com 'Insufficient privileges ... CREATE STAGE/TABLE granted on SCHEMA'.
+USE ROLE ACCOUNTADMIN;
 USE SCHEMA FISIOVET.FISIOVET_EXTERNAL;
 
 CREATE OR REPLACE EXTERNAL TABLE clients_animals(

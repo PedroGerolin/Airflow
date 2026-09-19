@@ -1,0 +1,26 @@
+# MODELO do profiles.yml (o arquivo real, profiles.yml, é gitignorado e NÃO vai pro repo).
+# Copie este arquivo para profiles.yml e ajuste os valores marcados com <...>.
+# Nenhum segredo aqui: senha/chave/passphrase vêm de variáveis de ambiente e de arquivos em credential/.
+#
+# O nome do profile ("fiosiovet") precisa bater com "profile:" do dbt_project.yml.
+fiosiovet:
+  target: prod_bigquery
+  outputs:
+    prod_bigquery:
+      type: bigquery
+      method: service-account
+      keyfile: /opt/airflow/credential/gerolingcp-<id-da-chave>.json   # caminho DENTRO do container
+      project: gerolingcp
+      dataset: FisioVet
+      threads: 1
+    dev_snowflake:
+      type: snowflake
+      account: <organizacao-conta>          # formato ORGANIZACAO-CONTA (Snowsight: menu da conta > copiar identificador)
+      user: <usuario>                       # o usuario que recebeu a chave publica (ALTER USER ... SET RSA_PUBLIC_KEY)
+      role: ACCOUNTADMIN
+      warehouse: COMPUTE_WH
+      database: FISIOVET
+      schema: FISIOVET
+      # Autenticacao por chave (login so com senha esta sendo bloqueado pela Snowflake)
+      private_key_path: "{{ env_var('SNOWFLAKE_PRIVATE_KEY_PATH', '/opt/airflow/credential/snowflake_rsa_key.p8') }}"
+      private_key_passphrase: "{{ env_var('SNOWFLAKE_PRIVATE_KEY_PASSPHRASE') }}"

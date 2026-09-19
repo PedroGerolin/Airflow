@@ -6,6 +6,24 @@ independentes na mesma instância: **FisioVet** (scraping via Selenium) e **Weat
 FisioVet materializa em **BigQuery e Snowflake em paralelo, a cada execução** (não é mais um
 target alternativo — os dois bancos ficam sempre espelhados). WeatherAPI usa só BigQuery.
 
+## Combinados com o usuário (obrigatórios em toda sessão)
+
+O usuário está usando este projeto **pra aprender** (Snowflake, dbt, GCP, Docker, etc.) e pode ter
+que refazer a infraestrutura em outra conta (o Snowflake é trial). Portanto:
+
+1. **Explicar de forma didática, na resposta, tudo que for feito** — em qualquer lugar (Snowflake,
+   GCP, Docker, Windows, Git…): o que foi feito, **quais comandos** foram executados, **por quê** e o
+   **conceito** por trás. Não basta resumir o resultado.
+2. **Registrar toda mudança de infra de forma reproduzível**: SQL do Snowflake em
+   `dags/FisioVet/.dbt/snowflake_setup/` (script numerado), comandos do GCP em
+   `gcp_setup/README.md`, automação em `scripts/`. Nunca só "executar e esquecer".
+3. **Atualizar `docs/DIARIO_DE_BORDO.md`** ao fim de cada sessão (modelo no fim do arquivo) e,
+   se surgir conceito novo, o guia correspondente em `docs/guias/`. Índice e combinados em
+   `docs/README.md`; pendências em `docs/ROADMAP.md`; refazer o Snowflake do zero em
+   `docs/RECRIAR_SNOWFLAKE.md` (manter atualizado se os scripts mudarem).
+4. **Rodar sempre pelo caminho real e checar paridade** BigQuery × Snowflake (`MAX(date)`,
+   contagens), não só "terminou sem erro".
+
 ## Estrutura do repositório
 
 ```

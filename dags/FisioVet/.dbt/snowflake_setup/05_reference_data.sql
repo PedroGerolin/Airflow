@@ -4,7 +4,9 @@
 -- de nenhuma fonte automatizada — são mantidos manualmente e só existiam nesse
 -- arquivo de scratch antes desta migração para o repositório.
 
-USE ROLE SYSADMIN;
+-- ACCOUNTADMIN (e nao SYSADMIN): os schemas foram criados por ACCOUNTADMIN, que e o dono.
+-- Rodar como SYSADMIN falha com 'Insufficient privileges ... CREATE STAGE/TABLE granted on SCHEMA'.
+USE ROLE ACCOUNTADMIN;
 USE SCHEMA FISIOVET.FISIOVET;
 
 CREATE TABLE IF NOT EXISTS SERVICES(
