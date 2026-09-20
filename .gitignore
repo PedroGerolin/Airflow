@@ -16,3 +16,4 @@ dags/WeatherAPI/.dbt/target
 dags/WeatherAPI/.dbt/profiles.yml
 .venv
 .claude/settings.local.json
+docs/

@@ -17,7 +17,8 @@ que refazer a infraestrutura em outra conta (o Snowflake é trial). Portanto:
 2. **Registrar toda mudança de infra de forma reproduzível**: SQL do Snowflake em
    `dags/FisioVet/.dbt/snowflake_setup/` (script numerado), comandos do GCP em
    `gcp_setup/README.md`, automação em `scripts/`. Nunca só "executar e esquecer".
-3. **Atualizar `docs/DIARIO_DE_BORDO.md`** ao fim de cada sessão (modelo no fim do arquivo) e,
+3. **A pasta `docs/` é só do usuário: fica no `.gitignore` e NUNCA deve ser commitada** (são as
+   anotações de estudo dele; existe só no disco local). **Atualizar `docs/DIARIO_DE_BORDO.md`** ao fim de cada sessão (modelo no fim do arquivo) e,
    se surgir conceito novo, o guia correspondente em `docs/guias/`. Índice e combinados em
    `docs/README.md`; pendências em `docs/ROADMAP.md`; refazer o Snowflake do zero em
    `docs/RECRIAR_SNOWFLAKE.md` (manter atualizado se os scripts mudarem).
