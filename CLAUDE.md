@@ -17,11 +17,13 @@ que refazer a infraestrutura em outra conta (o Snowflake é trial). Portanto:
 2. **Registrar toda mudança de infra de forma reproduzível**: SQL do Snowflake em
    `dags/FisioVet/.dbt/snowflake_setup/` (script numerado), comandos do GCP em
    `gcp_setup/README.md`, automação em `scripts/`. Nunca só "executar e esquecer".
-3. **A pasta `docs/` é só do usuário: fica no `.gitignore` e NUNCA deve ser commitada** (são as
-   anotações de estudo dele; existe só no disco local). **Atualizar `docs/DIARIO_DE_BORDO.md`** ao fim de cada sessão (modelo no fim do arquivo) e,
-   se surgir conceito novo, o guia correspondente em `docs/guias/`. Índice e combinados em
-   `docs/README.md`; pendências em `docs/ROADMAP.md`; refazer o Snowflake do zero em
-   `docs/RECRIAR_SNOWFLAKE.md` (manter atualizado se os scripts mudarem).
+3. **As anotações de estudo do usuário ficam FORA do repositório**, na pasta do OneDrive dele
+   `%USERPROFILE%\OneDrive\Estudos\Airflow_FisioVet\` (antes era `docs/`, que continua no
+   `.gitignore` como rede de segurança — **nunca** criar/commitar anotações dentro do repo).
+   **Atualizar `DIARIO_DE_BORDO.md` lá** ao fim de cada sessão (modelo no fim do arquivo) e,
+   se surgir conceito novo, o guia correspondente em `guias/`. Índice e combinados em
+   `README.md`; pendências em `ROADMAP.md`; refazer o Snowflake do zero em
+   `RECRIAR_SNOWFLAKE.md` (manter atualizado se os scripts mudarem).
 4. **Rodar sempre pelo caminho real e checar paridade** BigQuery × Snowflake (`MAX(date)`,
    contagens), não só "terminou sem erro".
 
