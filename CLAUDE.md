@@ -24,8 +24,9 @@ que refazer a infraestrutura em outra conta (o Snowflake é trial). Portanto:
    se surgir conceito novo, o guia correspondente em `guias/`. Índice e combinados em
    `README.md`; pendências em `ROADMAP.md`; refazer o Snowflake do zero em
    `RECRIAR_SNOWFLAKE.md` (manter atualizado se os scripts mudarem).
-4. **Rodar sempre pelo caminho real e checar paridade** BigQuery × Snowflake (`MAX(date)`,
-   contagens), não só "terminou sem erro".
+4. **Rodar sempre pelo caminho real e checar paridade** BigQuery × Snowflake (`COUNT(*)`,
+   `MIN/MAX(date)` **e `SUM()` de valores**, inclusive depois de um run **incremental**), não só
+   "terminou sem erro" nem só `MAX(date)` — dois bugs de 20/09/2026 passaram por esse critério fraco.
 
 ## Estrutura do repositório
 
@@ -93,11 +94,46 @@ estruturalmente idênticas em tipagem** — isso já causou bugs reais (setembro
 - **As external tables do Snowflake precisam de `REFRESH` pra enxergar arquivos novos**
   (`AUTO_REFRESH = false`; o BigQuery lista o bucket a cada consulta). Os hooks `on-run-start`
   do `dbt_project.yml` fazem isso só em `target.type == 'snowflake'`. Sem eles o Snowflake ficou
-  2 dias atrasado sem erro (achado em 19/09/2026). Pra conferir paridade: comparar `MAX(date)` e
-  `COUNT(DISTINCT date)` de `sales` nos dois bancos, não só o status do run.
+  2 dias atrasado sem erro (achado em 19/09/2026). Pra conferir paridade: comparar `COUNT(*)`,
+  `MIN/MAX(date)` e `SUM(Liquido)` de `sales` nos dois bancos, não só o status do run.
+  (Consulta no Snowflake sem MCP: `dbt show --inline "SELECT ... {{ ref('sales') }}" --target dev_snowflake` no container.)
 - Se algum dia recriar essas external tables do zero, siga a ordem numerada em
   `dags/FisioVet/.dbt/snowflake_setup/README.md` — inclui o passo manual de conceder acesso
   GCS à service account que o Snowflake gera (muda a cada conta/trial).
+
+- **`CAST(... AS NUMERIC)` no Snowflake é `NUMBER(38,0)` — arredonda os centavos** (no BigQuery guarda
+  9 casas). `sales.sql` usa `{{ money }}` = `NUMERIC(18,2)` no Snowflake (achado e corrigido em 20/09/2026,
+  ao comparar somas; contagens batiam, valores não). Ao tipar dinheiro em model novo, usar o mesmo padrão.
+
+- **`incremental_strategy='insert_overwrite'` não é por partição no Snowflake**: o `dbt-snowflake` a converte em
+  `INSERT OVERWRITE INTO`, que **esvazia a tabela inteira**. Como `sales` só relê 120 dias, cada execução
+  incremental deixava o Snowflake só com esse período (achado em 20/09/2026; nenhum check de `MAX(date)` pega
+  isso). `sales.sql` agora usa `delete+insert` com `unique_key='date'` no Snowflake (equivale a trocar as
+  partições do lote) e mantém `insert_overwrite` no BigQuery. **Depois de qualquer run incremental, conferir
+  `COUNT(*)` e `SUM()`, não só `MAX(date)`.**
+
+### Janela da exportação de vendas e recarga completa
+
+`export_sales()` baixa **do dia 1 do mês passado até hoje** (~31–61 dias) e cada partição
+`FisioVet/sales/date=AAAA-MM-DD/` só é regravada enquanto está nessa janela — depois vira uma
+**fotografia congelada**. Baixas dadas depois (cliente que paga a cobrança de julho só em setembro)
+não chegam ao warehouse; em 20/09/2026 isso fazia Julho/2026 aparecer com 55 clientes/R$ 42,9 mil
+"em aberto" que já estavam pagos. O `dbt` (`sales` incremental) reprocessa 120 dias, mas isso é sobre o
+que já está no bucket, não sobre o que a exportação baixa. O usuário aceitou o risco (pagamentos com mais
+de ~2 meses de atraso são raros; baixa manual se ocorrer) — ver decisão pendente sobre ampliar a janela.
+
+**Recarga completa** (foi feita em 20/09/2026, 01/08/2023 → hoje, 965 partições, ~17 min):
+1. Backup opcional: `gcloud storage cp -r gs://gerolin_etl/FisioVet/sales gs://gerolin_etl/_backup/FisioVet_sales_<data>/`
+2. `airflow dags trigger fisiovet -r full_reload_<data> --conf '{"sales_start_date": "01/08/2023"}'`
+   (dentro do container: `docker compose exec -T airflow-webserver ...`; a DAG espera o CSV terminar de baixar).
+3. `dbt run --full-refresh` nos **dois** targets — sem isso o `sales` incremental não relê partições antigas
+   (o `REFRESH` do Snowflake, no `on-run-start`, já enxerga arquivos regravados: validado).
+4. Conferir paridade: linhas, `SUM(Liquido)`, valor em aberto e `MAX(date)` iguais nos dois bancos.
+
+**Pendência (baixa prioridade)**: a deduplicação de `sales` (`QUALIFY ROW_NUMBER() ... ORDER BY Venda`) é
+não determinística e descarta 68 das 12.190 linhas do arquivo (62 grupos idênticos + 1 com valores
+diferentes, ~R$ 170); nenhuma das descartadas está em aberto (não afeta cobrança), mas gera ~R$ 11 de
+diferença na soma histórica entre BigQuery e Snowflake. Revisar chave/critério de desempate.
 
 **Gap conhecido**: `fisioVetDownloader.enter_debts_page()` existe mas nenhuma task chama —
 o arquivo `contas-a-pagar.csv` que a DAG transforma/transfere precisa ser obtido manualmente.

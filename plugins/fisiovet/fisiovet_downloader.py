@@ -1,5 +1,7 @@
+import os
+import glob
 import time
-import datetime 
+import datetime
 from datetime import timedelta
 from httpcore import TimeoutException
 from selenium import webdriver
@@ -87,7 +89,9 @@ class fisioVetDownloader:
         self.driver.get("https://app.simples.vet/principal/venda/venda.php")
         time.sleep(2)
 
-    def export_sales(self):
+    def export_sales(self, data_inicial=None):
+        # data_inicial (dd/mm/aaaa) só é usada na RECARGA COMPLETA (--conf sales_start_date da DAG);
+        # na execução diária fica None e vale a janela padrão abaixo.
         # --- OPÇÃO 1: Primeiro dia do MÊS PASSADO (Ex: se hoje é Julho, pega 01/06) ---
         dataInicial = (datetime.date.today().replace(day=1) - timedelta(days=1)).replace(day=1).strftime("%d/%m/%Y")
         
@@ -95,7 +99,11 @@ class fisioVetDownloader:
         # dataInicial = ((datetime.date.today().replace(day=1) - timedelta(days=1)).replace(day=1) - timedelta(days=1)).replace(day=1).strftime("%d/%m/%Y")
         
         dataFinal = datetime.date.today().strftime("%d/%m/%Y")
-        
+
+        if data_inicial:
+            datetime.datetime.strptime(data_inicial, "%d/%m/%Y")  # valida o formato (o valor vai num script JS)
+            dataInicial = data_inicial
+
         txtData = self.driver.find_element(By.ID, "p__ven_dat_data")
         self.driver.execute_script("arguments[0].type='text';",txtData)
         self.driver.execute_script(f"arguments[0].value='{dataInicial}-{dataFinal}';",txtData)
@@ -108,6 +116,25 @@ class fisioVetDownloader:
         btn_exportarcsv = self.driver.find_element(By.LINK_TEXT, "Exportar para CSV")
         btn_exportarcsv.click()
         time.sleep(2)
+
+        if data_inicial:
+            # período longo demora mais que o sleep fixo: espera o CSV terminar de baixar
+            self.wait_for_download("Vendas.csv")
+
+    def wait_for_download(self, file_name, timeout=600):
+        folder = "/opt/airflow/files/FisioVet"
+        path = os.path.join(folder, file_name)
+        deadline = time.time() + timeout
+        last_size = -1
+        while time.time() < deadline:
+            downloading = glob.glob(os.path.join(folder, "*.crdownload"))
+            if os.path.isfile(path) and not downloading:
+                size = os.path.getsize(path)
+                if size == last_size:
+                    return
+                last_size = size
+            time.sleep(3)
+        raise TimeoutError(f"{file_name} não terminou de baixar em {timeout}s")
 
     def enter_debts_page(self):
         self.driver.get("https://app.simples.vet/v3/financeiro/contas-a-pagar")

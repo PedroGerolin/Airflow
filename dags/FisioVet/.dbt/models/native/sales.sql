@@ -1,16 +1,20 @@
 {{ 
     config(
         materialized='incremental',
-        incremental_strategy='insert_overwrite',
+        incremental_strategy='insert_overwrite' if target.type == 'bigquery' else 'delete+insert',
         transient= false,
-        unique_key=['Venda','CodigoCliente','NomeAnimal','ProdutoServico'],
+        unique_key=['Venda','CodigoCliente','NomeAnimal','ProdutoServico'] if target.type == 'bigquery' else 'date',
         partition_by={
             "field":"date",
             "data_type": "DATE"
         } 
-    ) 
+    )
 }}
-SELECT  
+{# insert_overwrite: no BigQuery troca só as partições do lote; no Snowflake vira INSERT OVERWRITE e ESVAZIA a
+   tabela inteira (ficava só a janela de 120 dias). Lá usamos delete+insert por `date`, equivalente por partição. #}
+{# No Snowflake, NUMERIC sem parâmetros vira NUMBER(38,0) e arredonda os centavos; no BigQuery NUMERIC já guarda 9 casas #}
+{% set money = 'NUMERIC(18,2)' if target.type == 'snowflake' else 'NUMERIC' %}
+SELECT
         {% if target.name == 'dev_snowflake' %}
             TO_DATE(Dataehora, 'DD/MM/YYYY HH24:MI') AS DataHora,
         {% else %}
@@ -34,11 +38,11 @@ SELECT
         TipodoItem AS TipoItem,
         Grupo,
         Produto_servico AS ProdutoServico,
-        CAST(REPLACE(REPLACE(ValorUnitario,'.',''),',','.') AS NUMERIC) AS ValorUnitario,
+        CAST(REPLACE(REPLACE(ValorUnitario,'.',''),',','.') AS {{ money }}) AS ValorUnitario,
         Quantidade,
-        CAST(REPLACE(REPLACE(Bruto,'.',''),',','.') AS NUMERIC) AS Bruto,
-        CAST(REPLACE(REPLACE(Desconto,'.',''),',','.') AS NUMERIC) AS Desconto,
-        CAST(REPLACE(REPLACE(Liquido,'.',''),',','.') AS NUMERIC) AS Liquido,
+        CAST(REPLACE(REPLACE(Bruto,'.',''),',','.') AS {{ money }}) AS Bruto,
+        CAST(REPLACE(REPLACE(Desconto,'.',''),',','.') AS {{ money }}) AS Desconto,
+        CAST(REPLACE(REPLACE(Liquido,'.',''),',','.') AS {{ money }}) AS Liquido,
         Observacoes,
         date
     FROM {{ source('FisioVet_External','sales')}}

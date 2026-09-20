@@ -7,6 +7,7 @@ from fisiovet.fisiovet_downloader import fisioVetDownloader
 from airflow.operators.empty import EmptyOperator
 from airflow.operators.bash import BashOperator
 from airflow.decorators import task, dag, task_group
+from airflow.operators.python import get_current_context
 from airflow.utils.edgemodifier import Label
 
 
@@ -46,9 +47,12 @@ def fisiovet_dag():
         
         @task()
         def download_sales_file():
+            # recarga completa: airflow dags trigger fisiovet --conf '{"sales_start_date": "01/08/2023"}'
+            # (sem conf, vale a janela padrão do downloader: dia 1 do mês passado até hoje)
+            conf = get_current_context()["dag_run"].conf or {}
             fisioVetSales = iniciarfisioVetDownloader()
             fisioVetSales.enter_sales_page()
-            fisioVetSales.export_sales()
+            fisioVetSales.export_sales(data_inicial=conf.get("sales_start_date"))
     
         download_clients_file() >> download_sales_file()
 
