@@ -84,7 +84,7 @@ for ds in FisioVet FisioVet_Analytics; do
 done
 
 # tabelas e dados iniciais (scripts versionados em gcp_setup/sql/, rodar nesta ordem)
-for f in 01_fisiovet_app_tables 02_seed_mensagens 03_seed_contatos 04_ajuste_como_chamar_e_animais; do
+for f in 01_fisiovet_app_tables 02_seed_mensagens 03_seed_contatos 04_ajuste_como_chamar_e_animais 05_nota_fiscal; do
   SQL=$'\n'"$(cat gcp_setup/sql/$f.sql)"      # ver armadilha 1 abaixo
   bq query --project_id=gerolingcp --location=US --nouse_legacy_sql "$SQL"
 done
@@ -101,6 +101,7 @@ Estado final: `cobranca-app` = `bigquery.jobUser` (projeto) + `dataEditor` em `F
    prefixe uma quebra de linha (`$'\n'"$(cat arquivo)"`). Passar por argumento (e nao por stdin) manteve os acentos.
 2. No BigQuery, `NOT NULL DEFAULT 'x'` na mesma coluna e erro de sintaxe; o app preenche os valores, sem `DEFAULT`.
 3. O `04_*.sql` (21/09) troca o nome do contato pelo primeiro nome e o marcador `{nome_cliente}` por `{animais}` nos rascunhos; os seeds 02/03 ja nascem assim numa recriacao do zero.
-4. O `03_seed_contatos.sql` roda `INSERT ... SELECT` dentro do BigQuery: telefones de clientes nao passam por
+4. O `05_nota_fiscal.sql` (21/09) adiciona `NotaFiscal` e `NFEmitidaNoCiclo` a `contatos` (`ALTER TABLE ... ADD COLUMN IF NOT EXISTS`: so metadado, linhas existentes ficam NULL); o `01` ja cria as colunas numa recriacao do zero.
+5. O `03_seed_contatos.sql` roda `INSERT ... SELECT` dentro do BigQuery: telefones de clientes nao passam por
    arquivo nem pelo repo. E idempotente (`NOT EXISTS`).
 Recriar em outro projeto: trocar `gerolingcp` nos comandos e nos `.sql`, e rodar tudo de novo.

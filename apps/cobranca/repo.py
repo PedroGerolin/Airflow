@@ -27,6 +27,8 @@ T_ANIMALS = f"`{PROJECT}.FisioVet.animals`"
 TZ = ZoneInfo("America/Sao_Paulo")
 SITUACOES = ("ATIVO", "INCOBRAVEL")
 ESTADOS = ("A_COBRAR", "COBRADO", "NAO_COBRAR_NO_CICLO", "INCOBRAVEL")
+NF_ROTULOS = {"COM_CPF": "Fazer NF com CPF", "SEM_CPF": "Fazer NF sem CPF"}
+NF_SEM = "— sem NF —"  # opcao da lista para desfazer; no banco vira NULL (em branco)
 MESES = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
          "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
 
@@ -88,6 +90,21 @@ def brl(valor) -> str:
     return "R$ " + f"{float(valor):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
+def rotulo_nf(valor) -> str | None:
+    """COM_CPF -> 'Fazer NF com CPF'; vazio/None -> None (em branco na tela)."""
+    return NF_ROTULOS.get(valor) if isinstance(valor, str) else None
+
+
+def nf_do_rotulo(rotulo) -> str | None:
+    """Volta do rotulo da tela para o valor do banco. '— sem NF —', vazio ou None -> None."""
+    if rotulo is None or rotulo == "" or rotulo == NF_SEM or (isinstance(rotulo, float) and pd.isna(rotulo)):
+        return None
+    for valor, texto in NF_ROTULOS.items():
+        if texto == rotulo:
+            return valor
+    raise ValueError(f"Opção de nota fiscal inválida: {rotulo}")
+
+
 def resumo_por_estado(fila: pd.DataFrame) -> dict:
     """{estado: (quantidade de clientes, total em aberto)} para os 4 estados (zeros incluidos)."""
     saida = {}
@@ -111,6 +128,16 @@ def _q(client, sql: str, **params):
         query_parameters=[bigquery.ScalarQueryParameter(k, t, v) for k, (t, v) in params.items()]
     )
     return client.query(sql, job_config=cfg).result()
+
+
+def _dml(client, sql: str, **params) -> int:
+    """Como _q, mas devolve quantas linhas o INSERT/UPDATE/DELETE afetou."""
+    cfg = bigquery.QueryJobConfig(
+        query_parameters=[bigquery.ScalarQueryParameter(k, t, v) for k, (t, v) in params.items()]
+    )
+    job = client.query(sql, job_config=cfg)
+    job.result()
+    return job.num_dml_affected_rows or 0
 
 
 def ciclo_atual(client) -> date | None:
@@ -155,7 +182,7 @@ def sessoes_cliente(client, codigo: int) -> pd.DataFrame:
 def contatos_df(client) -> pd.DataFrame:
     return _q(client, f"""
         SELECT c.CodigoCliente, cl.Nome AS NomeCliente, an.Animais, c.NomeContato, c.TelefoneWhatsapp,
-               c.Situacao, c.Observacao, c.RevisadoEm IS NOT NULL AS Revisado
+               c.Situacao, c.NotaFiscal, c.Observacao, c.RevisadoEm IS NOT NULL AS Revisado
         FROM {T_CONTATOS} c
         LEFT JOIN (SELECT CAST(Codigo AS INT64) AS Codigo, ANY_VALUE(Nome) AS Nome
                    FROM {T_CLIENTS} GROUP BY 1) cl ON cl.Codigo = c.CodigoCliente
@@ -208,6 +235,28 @@ def definir_situacao(client, codigo: int, situacao: str) -> None:
     _garantir_contato(client, codigo)
     _q(client, f"UPDATE {T_CONTATOS} SET Situacao = @s, AtualizadoEm = CURRENT_TIMESTAMP() WHERE CodigoCliente = @codigo",
        s=("STRING", situacao), codigo=("INT64", int(codigo)))
+
+
+def definir_nota_fiscal(client, codigo: int, valor: str | None) -> None:
+    """COM_CPF, SEM_CPF ou None (nao precisa de NF). Tirar a NF tambem apaga a marca de 'emitida'."""
+    if valor not in (None, "COM_CPF", "SEM_CPF"):
+        raise ValueError(f"Nota fiscal inválida: {valor}")
+    _garantir_contato(client, codigo)
+    _q(client, f"""UPDATE {T_CONTATOS}
+                   SET NotaFiscal = @v, NFEmitidaNoCiclo = IF(@v IS NULL, NULL, NFEmitidaNoCiclo),
+                       AtualizadoEm = CURRENT_TIMESTAMP()
+                   WHERE CodigoCliente = @codigo""",
+       v=("STRING", valor), codigo=("INT64", int(codigo)))
+
+
+def definir_nf_emitida(client, codigo: int, ciclo: date | None) -> int:
+    """Marca a NF como emitida no ciclo (expira sozinha no ciclo seguinte); None desmarca.
+    So vale para quem tem NF configurada. Devolve quantas linhas mudou (0 = cliente sem NF, ignorado)."""
+    so_com_nf = "" if ciclo is None else " AND NotaFiscal IS NOT NULL"
+    return _dml(client, f"""UPDATE {T_CONTATOS}
+                            SET NFEmitidaNoCiclo = @ciclo, AtualizadoEm = CURRENT_TIMESTAMP()
+                            WHERE CodigoCliente = @codigo{so_com_nf}""",
+                ciclo=("DATE", ciclo), codigo=("INT64", int(codigo)))
 
 
 def definir_nao_cobrar(client, codigo: int, ciclo: date | None) -> None:

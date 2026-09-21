@@ -9,6 +9,8 @@ CREATE TABLE IF NOT EXISTS `gerolingcp.FisioVet_App.contatos` (
   TelefoneWhatsapp STRING OPTIONS(description='So digitos com DDI, ex.: 5511999999999'),
   Situacao STRING NOT NULL OPTIONS(description='ATIVO ou INCOBRAVEL. Incobravel some da fila'),
   NaoCobrarNoCiclo DATE OPTIONS(description='Se igual ao MesReferencia do ciclo atual: devendo, nao cobrar. Expira sozinho no ciclo seguinte'),
+  NotaFiscal STRING OPTIONS(description='Precisa de NF? COM_CPF | SEM_CPF | vazio = nao precisa'),
+  NFEmitidaNoCiclo DATE OPTIONS(description='Se igual ao MesReferencia do ciclo atual: NF ja emitida neste ciclo. Expira sozinho no ciclo seguinte'),
   Observacao STRING OPTIONS(description='Motivo / anotacao livre'),
   RevisadoEm TIMESTAMP OPTIONS(description='Nulo = contato ainda nao conferido pelo usuario'),
   AtualizadoEm TIMESTAMP

@@ -10,6 +10,10 @@ models:
         tests:
           - unique
           - not_null
+      - name: NFStatus
+        tests:
+          - accepted_values:
+              values: ['PENDENTE', 'EMITIDA']
       - name: EstadoFila
         tests:
           - accepted_values:

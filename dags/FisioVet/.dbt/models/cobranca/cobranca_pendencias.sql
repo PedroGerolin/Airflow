@@ -14,6 +14,9 @@
    NomeCliente vem do CADASTRO (clients, refeito por inteiro a cada execucao), nao das vendas: as vendas antigas
    (fora da janela da exportacao) guardam o nome congelado de quando sairam da janela. So cai no nome das vendas
    se o cliente nao existir no cadastro.
+   Nota fiscal: NotaFiscal (COM_CPF | SEM_CPF | NULL = nao precisa) e NFStatus (NULL | PENDENTE | EMITIDA), este
+   derivado como o "nao cobrar": NFEmitidaNoCiclo = ciclo atual => EMITIDA; ao iniciar o mes seguinte volta a PENDENTE.
+   TemCPF e so um sim/nao (o CPF em si NAO sai nesta view: o Metabase le este dataset).
    Contato: usa contatos (app) e, se o cliente nao tiver linha la, o telefone do cadastro do Simples Vet e o
    PRIMEIRO NOME do cliente. NomeContato = "como chamar" na mensagem ({nome_contato}). Animais = os animais com
    sessao em aberto (marcador {animais}; o app junta com " e "). #}
@@ -35,6 +38,7 @@ cadastro AS (
     SELECT
         CAST(Codigo AS INT64) AS CodigoCliente,
         Nome,
+        COALESCE(REGEXP_CONTAINS(CPF, r'^\d{11}$'), FALSE) AS TemCPF,
         CONCAT('55', REGEXP_REPLACE(REGEXP_EXTRACT(Telefone, r'(\(\d{2}\)\s*9\d{4}-?\d{4})'), r'\D', '')) AS TelefoneCadastro
     FROM {{ ref('clients') }}
     QUALIFY ROW_NUMBER() OVER (PARTITION BY Codigo ORDER BY Nome) = 1
@@ -68,6 +72,13 @@ SELECT
     T.RevisadoEm IS NOT NULL AS ContatoRevisado,
     COALESCE(T.Situacao, 'ATIVO') AS Situacao,
     T.Observacao,
+    T.NotaFiscal,
+    CASE
+        WHEN T.NotaFiscal IS NULL THEN NULL
+        WHEN T.NFEmitidaNoCiclo = P.MesCiclo THEN 'EMITIDA'
+        ELSE 'PENDENTE'
+    END AS NFStatus,
+    COALESCE(K.TemCPF, FALSE) AS TemCPF,
     CASE
         WHEN COALESCE(T.Situacao, 'ATIVO') = 'INCOBRAVEL' THEN 'INCOBRAVEL'
         WHEN T.NaoCobrarNoCiclo = P.MesCiclo THEN 'NAO_COBRAR_NO_CICLO'

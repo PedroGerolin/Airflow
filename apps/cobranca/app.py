@@ -69,7 +69,18 @@ def avisos_da_linha(linha) -> str:
         itens.append("contato não conferido")
     if linha["TemBaixaParcial"]:
         itens.append("baixa parcial")
+    if linha["NotaFiscal"] == "COM_CPF" and not linha["TemCPF"]:
+        itens.append("NF com CPF, mas sem CPF no cadastro")
     return ", ".join(itens)
+
+
+def nf_legivel(linha) -> str:
+    """'' (nao precisa) | 'com CPF — PENDENTE' | 'sem CPF — emitida'"""
+    nf = linha["NotaFiscal"]
+    if not isinstance(nf, str) or not nf:
+        return ""
+    tipo = "com CPF" if nf == "COM_CPF" else "sem CPF"
+    return f"{tipo} — {'emitida' if linha['NFStatus'] == 'EMITIDA' else 'PENDENTE'}"
 
 
 def montar_tabela(fila: pd.DataFrame) -> pd.DataFrame:
@@ -82,6 +93,7 @@ def montar_tabela(fila: pd.DataFrame) -> pd.DataFrame:
         "Total em aberto": fila["TotalEmAberto"].map(repo.brl),
         "Desde": fila["MesMaisAntigo"].map(lambda d: f"{d:%m/%Y}" if pd.notna(d) else ""),
         "Estado": fila.apply(estado_legivel, axis=1),
+        "NF": fila.apply(nf_legivel, axis=1),
         "Avisos": fila.apply(avisos_da_linha, axis=1),
     })
 
@@ -134,18 +146,28 @@ def aba_fila(c, ciclo):
         qtd, total = resumo[estado]
         col.metric(ROTULO_ESTADO[estado], f"{qtd} cliente(s)", repo.brl(total), delta_color="off")
 
-    f1, f2 = st.columns([3, 1])
+    com_nf = int(fila["NotaFiscal"].notna().sum())
+    if com_nf:
+        pendentes = int((fila["NFStatus"] == "PENDENTE").sum())
+        st.caption(f"Nota fiscal: **{pendentes} pendente(s)** de {com_nf} cliente(s) que precisam de NF neste ciclo.")
+
+    f1, f2, f3 = st.columns([3, 1, 1])
     padrao = ["A_COBRAR", "COBRADO", "NAO_COBRAR_NO_CICLO"]
     mostrar_inc = f2.toggle("Mostrar incobráveis", value=False)
+    so_nf = f3.toggle("Só NF pendente", value=False)
     escolhidos = f1.multiselect("Estados", repo.ESTADOS, default=padrao + (["INCOBRAVEL"] if mostrar_inc else []),
                                 format_func=lambda e: ROTULO_ESTADO[e], key=f"estados_{mostrar_inc}")
-    visiveis = fila[fila["EstadoFila"].isin(escolhidos)].reset_index(drop=True)
+    visiveis = fila[fila["EstadoFila"].isin(escolhidos)]
+    if so_nf:
+        visiveis = visiveis[visiveis["NFStatus"] == "PENDENTE"]
+    visiveis = visiveis.reset_index(drop=True)
     if visiveis.empty:
-        st.info("Nenhum cliente nesses estados.")
+        st.info("Nenhum cliente com esses filtros.")
         return
 
     evento = st.dataframe(montar_tabela(visiveis), hide_index=True, use_container_width=True,
-                          on_select="rerun", selection_mode="multi-row", key=f"fila_{mostrar_inc}_{len(escolhidos)}")
+                          on_select="rerun", selection_mode="multi-row",
+                          key=f"fila_{mostrar_inc}_{len(escolhidos)}_{so_nf}")
     linhas = evento.selection.rows
     if not linhas:
         st.caption("Selecione uma ou mais linhas para agir sobre elas.")
@@ -179,6 +201,20 @@ def aba_fila(c, ciclo):
         avisar(f"{len(codigos)} cliente(s) reativados.")
         recarregar()
 
+    n1, n2, _, _ = st.columns(4)
+    if n1.button("Marcar NF emitida", use_container_width=True,
+                 help="Vale só para quem tem NF configurada. Expira sozinha quando você iniciar o mês seguinte."):
+        feitos = sum(repo.definir_nf_emitida(c, cod, ciclo) for cod in codigos)
+        ignorados = len(codigos) - feitos
+        avisar(f"NF marcada como emitida em {feitos} cliente(s)."
+               + (f" {ignorados} ignorado(s): sem NF configurada." if ignorados else ""))
+        recarregar()
+    if n2.button("Desmarcar NF emitida", use_container_width=True):
+        for cod in codigos:
+            repo.definir_nf_emitida(c, cod, None)
+        avisar(f"NF desmarcada em {len(codigos)} cliente(s).")
+        recarregar()
+
     if len(codigos) == 1:
         detalhe_cliente(c, sel.iloc[0])
 
@@ -208,10 +244,17 @@ def detalhe_cliente(c, linha):
                                       "cumprimento (ex.: Maria, Sr. Carlos). Vira {nome_contato} na mensagem.")
             tel = st.text_input("WhatsApp (DDD + número)", value=repo.formatar_telefone(linha["TelefoneWhatsapp"]))
             obs = st.text_input("Observação", value=linha["Observacao"] or "")
+            opcoes_nf = [repo.NF_SEM] + list(repo.NF_ROTULOS.values())
+            nf_atual = repo.rotulo_nf(linha["NotaFiscal"]) or repo.NF_SEM
+            nf_escolhida = st.selectbox("Nota fiscal", opcoes_nf, index=opcoes_nf.index(nf_atual),
+                                        help="Deixe “sem NF” para quem não precisa de nota.")
             rev = st.checkbox("Marcar como conferido", value=True)
             if st.form_submit_button("Salvar contato", type="primary"):
                 try:
                     repo.salvar_contato(c, codigo, nome, tel, obs, rev)
+                    nf_nova = repo.nf_do_rotulo(nf_escolhida)
+                    if nf_nova != (linha["NotaFiscal"] if isinstance(linha["NotaFiscal"], str) else None):
+                        repo.definir_nota_fiscal(c, codigo, nf_nova)
                 except ValueError as erro:
                     st.error(str(erro))
                 else:
@@ -241,6 +284,7 @@ def aba_contatos(c):
         "Como chamar": vis["NomeContato"],
         "WhatsApp": vis["TelefoneWhatsapp"].map(repo.formatar_telefone),
         "Situacao": vis["Situacao"],
+        "Nota fiscal": vis["NotaFiscal"].map(repo.rotulo_nf),
         "Observacao": vis["Observacao"],
         "Conferido": vis["Revisado"],
     })
@@ -254,6 +298,9 @@ def aba_contatos(c):
             "Animais": st.column_config.TextColumn("Animais", help="Todos os animais do cliente. † = falecido.",
                                                    width="medium"),
             "Situacao": st.column_config.SelectboxColumn("Situação", options=list(repo.SITUACOES), required=True),
+            "Nota fiscal": st.column_config.SelectboxColumn(
+                "Nota fiscal", options=[repo.NF_SEM] + list(repo.NF_ROTULOS.values()),
+                help="Em branco = não precisa de NF. Escolha “— sem NF —” para desfazer."),
             "Observacao": "Observação",
             "Conferido": st.column_config.CheckboxColumn("Conferido"),
         },
@@ -274,6 +321,8 @@ def aba_contatos(c):
                                     linha["Observacao"], bool(linha["Conferido"]))
                 if "Situacao" in mudancas:
                     repo.definir_situacao(c, int(linha["CodigoCliente"]), linha["Situacao"])
+                if "Nota fiscal" in mudancas:
+                    repo.definir_nota_fiscal(c, int(linha["CodigoCliente"]), repo.nf_do_rotulo(linha["Nota fiscal"]))
                 salvos += 1
             except ValueError as erro:
                 erros.append(f"{linha['Cliente']}: {erro}")

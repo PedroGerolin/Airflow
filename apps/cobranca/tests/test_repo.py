@@ -57,6 +57,22 @@ def test_meses():
     assert type(repo.mes_sugerido(date(2026, 9, 21))) is date
 
 
+def test_rotulos_de_nota_fiscal():
+    assert repo.rotulo_nf("COM_CPF") == "Fazer NF com CPF"
+    assert repo.rotulo_nf("SEM_CPF") == "Fazer NF sem CPF"
+    assert repo.rotulo_nf(None) is None and repo.rotulo_nf(float("nan")) is None and repo.rotulo_nf("") is None
+    assert repo.nf_do_rotulo("Fazer NF com CPF") == "COM_CPF"
+    assert repo.nf_do_rotulo("Fazer NF sem CPF") == "SEM_CPF"
+    for vazio in (None, "", repo.NF_SEM, float("nan")):
+        assert repo.nf_do_rotulo(vazio) is None
+    try:
+        repo.nf_do_rotulo("qualquer coisa")
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("rotulo invalido deveria ser rejeitado")
+
+
 def test_resumo_por_estado():
     df = pd.DataFrame({"EstadoFila": ["A_COBRAR", "A_COBRAR", "COBRADO"], "TotalEmAberto": [100.0, 50.5, 10.0]})
     r = repo.resumo_por_estado(df)
@@ -121,6 +137,40 @@ def test_contato_crud():
         else:
             raise AssertionError("situacao invalida deveria ser rejeitada")
         assert SENTINELA in repo.contatos_df(c)["CodigoCliente"].tolist()
+    finally:
+        _limpar(c)
+
+
+def test_nota_fiscal():
+    c = _cliente()
+    ciclo = date(2026, 8, 1)
+
+    def linha():
+        return repo._q(c, f"SELECT * FROM {repo.T_CONTATOS} WHERE CodigoCliente = @k", k=("INT64", SENTINELA)).to_dataframe().iloc[0]
+
+    try:
+        repo.salvar_contato(c, SENTINELA, "Teste", None, None, revisado=False)
+        assert repo.definir_nf_emitida(c, SENTINELA, ciclo) == 0, "cliente sem NF configurada: marcar emitida deve ser ignorado"
+        assert pd.isna(linha()["NFEmitidaNoCiclo"])
+        repo.definir_nota_fiscal(c, SENTINELA, "COM_CPF")
+        assert linha()["NotaFiscal"] == "COM_CPF"
+        assert repo.definir_nf_emitida(c, SENTINELA, ciclo) == 1
+        assert linha()["NFEmitidaNoCiclo"] == ciclo
+        assert repo.definir_nf_emitida(c, SENTINELA, None) == 1, "desmarcar tem que funcionar"
+        assert pd.isna(linha()["NFEmitidaNoCiclo"])
+        repo.definir_nf_emitida(c, SENTINELA, ciclo)
+        repo.definir_nota_fiscal(c, SENTINELA, "SEM_CPF")
+        assert linha()["NFEmitidaNoCiclo"] == ciclo, "trocar COM_CPF por SEM_CPF nao apaga a emissao"
+        repo.definir_nota_fiscal(c, SENTINELA, None)
+        r = linha()
+        assert pd.isna(r["NotaFiscal"]) and pd.isna(r["NFEmitidaNoCiclo"]), "tirar a NF tambem limpa a marca de emitida"
+        try:
+            repo.definir_nota_fiscal(c, SENTINELA, "XPTO")
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("valor invalido deveria ser rejeitado")
+        assert "NotaFiscal" in repo.contatos_df(c).columns
     finally:
         _limpar(c)
 
