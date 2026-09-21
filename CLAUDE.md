@@ -47,6 +47,8 @@ plugins/
               # exporter.py, file_transformer.py
   fisiovet/   # código específico do FisioVet: fisiovet_downloader.py (Selenium)
   weather/    # código específico do WeatherAPI: weather_hook.py, weather_operator.py
+apps/
+  cobranca/   # app Streamlit de cobrança (compose próprio, porta 8501 só em localhost) — ver seção Cobrança
 config/requirements.txt   # dependências pip (UTF-16, cuidado ao editar)
 credential/                # segredos em arquivo (gitignored): service account GCP, API key
 files/                     # landing zone local de CSV/ORC (gitignored)
@@ -148,7 +150,7 @@ Schedule semanal (`0 0 * * 1`) com `catchup=True`.
 
 ## Cobrança por WhatsApp (em construção desde 21/09/2026)
 
-App de cobrança (Streamlit, ainda a construir) sobre tabelas no **BigQuery** (dataset `FisioVet_App`,
+App de cobrança (Streamlit, `apps/cobranca/`, **v1 no ar** em `http://localhost:8501`) sobre tabelas no **BigQuery** (dataset `FisioVet_App`,
 escrito só pelo app; o dbt não escreve lá): `contatos`, `ciclos`, `mensagens`, `envios`,
 `configuracoes` — DDL e seeds em `gcp_setup/sql/`, SA `cobranca-app` e IAM em `gcp_setup/README.md`
 (seção 4). O desenho completo e as regras de negócio estão nas anotações do usuário (`ROADMAP.md`,
@@ -164,6 +166,19 @@ Rodar o dbt local no BigQuery sem o container: perfil temporário com `keyfile` 
 `--target-path`/`--log-path` fora do projeto (senão o cache `target/` quebra o container).
 Validar mudanças de estado (ciclo, envio, "não cobrar") dentro de `BEGIN TRANSACTION ... ROLLBACK` para não
 sujar as tabelas do usuário.
+
+**App (`apps/cobranca/`)**: `repo.py` (toda a conversa com o BigQuery: queries parametrizadas, só DML — **nunca
+`insert_rows_json`**, o streaming buffer bloqueia UPDATE/DELETE por ~90 min) e `app.py` (só a tela: abas Fila e
+Contatos). Compose próprio (como o Metabase), porta publicada só em `127.0.0.1`, chave `credential/cobranca-app.json`
+montada só-leitura, `restart: unless-stopped`. Subir: `cd apps/cobranca && docker compose up -d --build`. Testes:
+`docker compose run --rm cobranca python tests/test_repo.py` e `.../test_app.py` (AppTest; mexem só em dado de
+mentira, limpam no `finally` e pulam se já existir ciclo real). Versão do Streamlit fixada em `requirements.txt`.
+v1 = fila + contatos + iniciar ciclo + "não cobrar"/incobrável; **v2 (a fazer)**: modelos de mensagem, links
+`wa.me` e registro de `envios`.
+**Status de venda existentes em `sales`**: `Baixado`, `Aberto`, `Baixa parcial`, `Em atendimento` (novo, visto em
+21/09/2026: venda do dia ainda aberta no sistema). As views de cobrança olham só `Aberto`/`Baixa parcial`; se um
+`Em atendimento` de mês fechado aparecer, ele ficaria fora da fila — vigiar. `faturamento_cliente.ValorEmAberto`
+também só soma `Aberto` (ignora `Baixa parcial`; pendente de ajuste).
 
 ## Convenções e pontos de atenção
 

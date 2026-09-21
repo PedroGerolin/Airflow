@@ -1,0 +1,25 @@
+# App de cobranca (Streamlit) - compose separado do Airflow de proposito (o Airflow sobe/desce todo dia;
+# o app fica disponivel quando voce quiser cobrar), como o Metabase.
+#
+# Subir:      docker compose up -d --build     (dentro desta pasta)
+# Acessar:    http://localhost:8501
+# Derrubar:   docker compose down
+# Testes:     docker compose run --rm cobranca python tests/test_repo.py
+#             docker compose run --rm cobranca python tests/test_app.py
+#
+# Seguranca: o app mostra nomes, telefones e valores de clientes, entao a porta so e publicada em
+# 127.0.0.1 (este computador) - nunca 0.0.0.0. A chave da service account fica em credential/
+# (gitignorado) e entra so-leitura no container; ela so escreve no dataset FisioVet_App.
+
+services:
+  cobranca:
+    build: .
+    container_name: cobranca
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8501:8501"
+    environment:
+      GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/cobranca-app.json
+      BQ_PROJECT: gerolingcp
+    volumes:
+      - ../../credential/cobranca-app.json:/run/secrets/cobranca-app.json:ro
