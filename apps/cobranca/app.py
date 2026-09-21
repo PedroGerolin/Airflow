@@ -75,7 +75,7 @@ def avisos_da_linha(linha) -> str:
 def montar_tabela(fila: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame({
         "Cliente": fila["NomeCliente"],
-        "Animais": fila["Animais"].fillna("").str.replace(", ", " e ", regex=False),
+        "Animais": fila["Animais"].fillna("").str.replace(", ", " / ", regex=False),
         "Como chamar": fila["NomeContato"],
         "WhatsApp": fila["TelefoneWhatsapp"].map(repo.formatar_telefone),
         "Sessões": fila["QtdSessoes"],
@@ -237,6 +237,7 @@ def aba_contatos(c):
     base = pd.DataFrame({
         "CodigoCliente": vis["CodigoCliente"],
         "Cliente": vis["NomeCliente"],
+        "Animais": vis["Animais"].fillna(""),
         "Como chamar": vis["NomeContato"],
         "WhatsApp": vis["TelefoneWhatsapp"].map(repo.formatar_telefone),
         "Situacao": vis["Situacao"],
@@ -247,9 +248,11 @@ def aba_contatos(c):
     chave = f"editor_contatos_{versao}_{so_pendentes}"
     st.data_editor(
         base, key=chave, hide_index=True, use_container_width=True, num_rows="fixed",
-        disabled=["CodigoCliente", "Cliente"],
+        disabled=["CodigoCliente", "Cliente", "Animais"],
         column_config={
             "CodigoCliente": st.column_config.NumberColumn("Código", format="%d"),
+            "Animais": st.column_config.TextColumn("Animais", help="Todos os animais do cliente. † = falecido.",
+                                                   width="medium"),
             "Situacao": st.column_config.SelectboxColumn("Situação", options=list(repo.SITUACOES), required=True),
             "Observacao": "Observação",
             "Conferido": st.column_config.CheckboxColumn("Conferido"),

@@ -22,6 +22,7 @@ T_CICLOS = f"`{PROJECT}.FisioVet_App.ciclos`"
 V_PENDENCIAS = f"`{PROJECT}.FisioVet_Analytics.cobranca_pendencias`"
 V_SESSOES = f"`{PROJECT}.FisioVet_Analytics.cobranca_sessoes`"
 T_CLIENTS = f"`{PROJECT}.FisioVet.clients`"
+T_ANIMALS = f"`{PROJECT}.FisioVet.animals`"
 
 TZ = ZoneInfo("America/Sao_Paulo")
 SITUACOES = ("ATIVO", "INCOBRAVEL")
@@ -153,11 +154,16 @@ def sessoes_cliente(client, codigo: int) -> pd.DataFrame:
 
 def contatos_df(client) -> pd.DataFrame:
     return _q(client, f"""
-        SELECT c.CodigoCliente, cl.Nome AS NomeCliente, c.NomeContato, c.TelefoneWhatsapp,
+        SELECT c.CodigoCliente, cl.Nome AS NomeCliente, an.Animais, c.NomeContato, c.TelefoneWhatsapp,
                c.Situacao, c.Observacao, c.RevisadoEm IS NOT NULL AS Revisado
         FROM {T_CONTATOS} c
         LEFT JOIN (SELECT CAST(Codigo AS INT64) AS Codigo, ANY_VALUE(Nome) AS Nome
                    FROM {T_CLIENTS} GROUP BY 1) cl ON cl.Codigo = c.CodigoCliente
+        LEFT JOIN (SELECT CAST(Cliente_Codigo AS INT64) AS Codigo,
+                          -- todos os animais do cliente numa linha: "Mel / Thor"; falecidos vao por ultimo, com cruz
+                          STRING_AGG(CONCAT(Nome, IF(VivoMorto LIKE '%bito%', ' †', '')), ' / '
+                                     ORDER BY IF(VivoMorto LIKE '%bito%', 1, 0), Nome) AS Animais
+                   FROM {T_ANIMALS} GROUP BY 1) an ON an.Codigo = c.CodigoCliente
         ORDER BY Revisado, NomeCliente""").to_dataframe()
 
 

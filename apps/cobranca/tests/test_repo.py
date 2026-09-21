@@ -137,6 +137,19 @@ def test_parametros_nao_sao_injecao():
         _limpar(c)
 
 
+def test_contatos_trazem_animais():
+    """So leitura: a aba Contatos mostra os animais do cliente numa linha, 'Mel / Thor', falecidos por ultimo com cruz."""
+    df = repo.contatos_df(_cliente())
+    assert "Animais" in df.columns
+    assert df["Animais"].notna().mean() > 0.9, "quase todo contato tem animal cadastrado"
+    com_varios = df["Animais"].dropna()[df["Animais"].dropna().str.contains(" / ", regex=False)]
+    assert len(com_varios) > 0, "deveria haver cliente com 2 ou mais animais"
+    for texto in df["Animais"].dropna():
+        partes = texto.split(" / ")
+        falecidos = [p.endswith(" †") for p in partes]
+        assert falecidos == sorted(falecidos), f"falecidos devem ficar por ultimo: {texto!r}"
+
+
 def test_garantir_contato_a_partir_do_cadastro():
     """definir_situacao num cliente SEM linha em contatos cria a linha a partir do cadastro do Simples Vet."""
     c = _cliente()
