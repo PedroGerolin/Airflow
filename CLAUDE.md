@@ -173,8 +173,12 @@ Contatos). Compose próprio (como o Metabase), porta publicada só em `127.0.0.1
 montada só-leitura, `restart: unless-stopped`. Subir: `cd apps/cobranca && docker compose up -d --build`. Testes:
 `docker compose run --rm cobranca python tests/test_repo.py` e `.../test_app.py` (AppTest; mexem só em dado de
 mentira, limpam no `finally` e pulam se já existir ciclo real). Versão do Streamlit fixada em `requirements.txt`.
-v1 = fila + contatos + iniciar ciclo + "não cobrar"/incobrável; **v2 (a fazer)**: modelos de mensagem, links
-`wa.me` e registro de `envios`.
+Abas: **Fila** (ações em massa, NF, envio), **Contatos** (edição em tabela, com animais e NF), **Mensagens** (modelos editáveis + prévia).
+**Envio (v2, no ar desde 21/09/2026)**: selecionar clientes na fila → escolher a mensagem → "Preparar" → painel com o texto, o link `wa.me` e
+"Marcar como enviado" (**só esse botão grava em `envios`**; abrir o link não grava). "Desfazer" apaga o último envio do cliente no ciclo —
+única exceção a "envios só recebe inserção". Marcadores: `{nome_contato} {nome_cliente} {animais} {mes} {lista_sessoes} {total}` (**sem `{pix}`**:
+decisão do usuário, ele manda a chave pelo WhatsApp; `configuracoes` existe e está sem uso). URL do `wa.me` acima de ~1800 caracteres vai sem
+texto (o app mostra o texto para copiar). Testes de gravação usam cliente `-1`, mês `1999-01` e uma cópia descartável de `mensagens`.
 **Nota fiscal** (`contatos.NotaFiscal` = `COM_CPF`/`SEM_CPF`/vazio, permanente; `contatos.NFEmitidaNoCiclo` = mês do ciclo em que a NF foi
 emitida, **expira sozinha** no ciclo seguinte, como `NaoCobrarNoCiclo`). A view expõe `NotaFiscal`, `NFStatus` (NULL|PENDENTE|EMITIDA) e
 `TemCPF` (só sim/não — **o CPF não sai na view**, o Metabase lê esse dataset). Marcar "emitida" em quem não tem NF configurada é ignorado.

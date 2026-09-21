@@ -20,4 +20,4 @@ ALTER TABLE `gerolingcp.FisioVet_App.contatos`
   ALTER COLUMN NomeContato SET OPTIONS (description='Como chamar a pessoa na mensagem (ex.: so o primeiro nome). Vira {nome_contato}');
 
 ALTER TABLE `gerolingcp.FisioVet_App.mensagens`
-  ALTER COLUMN Texto SET OPTIONS (description='Marcadores: {nome_contato} {nome_cliente} {animais} {mes} {lista_sessoes} {total} {pix}');
+  ALTER COLUMN Texto SET OPTIONS (description='Marcadores: {nome_contato} {nome_cliente} {animais} {mes} {lista_sessoes} {total}');

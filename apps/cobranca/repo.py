@@ -10,7 +10,10 @@ Regras do arquivo:
 """
 import os
 import re
+import uuid
 from datetime import date, datetime, timedelta
+from decimal import Decimal
+from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
 import pandas as pd
@@ -18,6 +21,8 @@ from google.cloud import bigquery
 
 PROJECT = os.environ.get("BQ_PROJECT", "gerolingcp")
 T_CONTATOS = f"`{PROJECT}.FisioVet_App.contatos`"
+T_MENSAGENS = f"`{PROJECT}.FisioVet_App.mensagens`"
+T_ENVIOS = f"`{PROJECT}.FisioVet_App.envios`"
 T_CICLOS = f"`{PROJECT}.FisioVet_App.ciclos`"
 V_PENDENCIAS = f"`{PROJECT}.FisioVet_Analytics.cobranca_pendencias`"
 V_SESSOES = f"`{PROJECT}.FisioVet_Analytics.cobranca_sessoes`"
@@ -115,6 +120,88 @@ def resumo_por_estado(fila: pd.DataFrame) -> dict:
     return saida
 
 
+# ---------- mensagem (puro, sem BigQuery) ----------
+
+MARCADORES = ("nome_contato", "nome_cliente", "animais", "mes", "lista_sessoes", "total")
+# URL do wa.me com texto muito longo pode falhar; acima disso o link vai sem texto e o app mostra o texto para copiar.
+LIMITE_URL_WHATSAPP = 1800
+
+
+def mes_extenso(mes: date) -> str:
+    """2026-08-01 -> 'agosto de 2026' (para o marcador {mes})."""
+    return f"{MESES[mes.month - 1].lower()} de {mes.year}"
+
+
+def juntar_lista(itens) -> str:
+    """['Mel'] -> 'Mel'; ['Mel','Thor'] -> 'Mel e Thor'; ['A','B','C'] -> 'A, B e C'."""
+    itens = [str(i) for i in itens if i is not None and str(i).strip()]
+    if len(itens) <= 1:
+        return "".join(itens)
+    return ", ".join(itens[:-1]) + " e " + itens[-1]
+
+
+def marcadores_desconhecidos(texto: str) -> list[str]:
+    """Marcadores {assim} que o app nao conhece (erro de digitacao, ou o antigo {pix})."""
+    vistos = []
+    for m in re.findall(r"\{(\w+)\}", texto or ""):
+        if m not in MARCADORES and m not in vistos:
+            vistos.append(m)
+    return vistos
+
+
+def formatar_sessoes(sessoes: pd.DataFrame) -> str:
+    """Lista para o marcador {lista_sessoes}: 'dd/mm - Animal - Servico - R$ x' (linhas em ordem de data).
+    Se ha mais de um mes, agrupa com titulo *Mes/AAAA* e subtotal; com um mes so, vai a lista direta."""
+    if sessoes.empty:
+        return ""
+    s = sessoes.sort_values("DataSessao", kind="stable")
+    meses = sorted({d.replace(day=1) for d in s["DataSessao"]})
+    blocos = []
+    for mes in meses:
+        parte = s[s["DataSessao"].map(lambda d, m=mes: d.replace(day=1) == m)]
+        linhas = []
+        for _, r in parte.iterrows():
+            animal = f"{r['NomeAnimal']} - " if isinstance(r["NomeAnimal"], str) and r["NomeAnimal"].strip() else ""
+            servico = r["ProdutoServico"] if isinstance(r["ProdutoServico"], str) else ""
+            parcial = " (baixa parcial)" if bool(r["Parcial"]) else ""
+            linhas.append(f"{r['DataSessao']:%d/%m} - {animal}{servico} - {brl(r['Valor'])}{parcial}")
+        if len(meses) > 1:
+            linhas = [f"*{nome_mes(mes)}*"] + linhas + [f"Subtotal: {brl(sum(parte['Valor']))}"]
+        blocos.append("\n".join(linhas))
+    return "\n\n".join(blocos)
+
+
+def montar_contexto(linha, sessoes: pd.DataFrame) -> dict:
+    """Valores dos marcadores para um cliente da fila (linha de cobranca_pendencias) e suas sessoes em aberto."""
+    animais = sorted({str(a) for a in sessoes["NomeAnimal"].dropna() if str(a).strip()})
+    return {
+        "nome_contato": linha["NomeContato"] or "",
+        "nome_cliente": linha["NomeCliente"] or "",
+        "animais": juntar_lista(animais),
+        "mes": mes_extenso(linha["MesCiclo"]),
+        "lista_sessoes": formatar_sessoes(sessoes),
+        "total": brl(linha["TotalEmAberto"]),
+    }
+
+
+def renderizar_mensagem(texto: str, contexto: dict) -> str:
+    """Troca cada {marcador} conhecido pelo valor. Numa passada so (valor com chaves nao e reprocessado);
+    marcador desconhecido fica como esta, para aparecer na conferencia."""
+    return re.sub(r"\{(\w+)\}", lambda m: str(contexto[m.group(1)]) if m.group(1) in contexto else m.group(0), texto)
+
+
+def link_whatsapp(telefone: str, texto: str | None = None) -> tuple[str, bool]:
+    """(url, texto_no_link). wa.me abre a conversa com o texto pronto; se a URL passar do limite,
+    devolve o link SEM texto (False) e o app mostra o texto para copiar."""
+    base = f"https://wa.me/{telefone}"
+    if not texto:
+        return base, False
+    url = f"{base}?text={quote(texto, safe='')}"
+    if len(url) > LIMITE_URL_WHATSAPP:
+        return base, False
+    return url, True
+
+
 # ---------- BigQuery ----------
 
 def get_client() -> bigquery.Client:
@@ -177,6 +264,68 @@ def sessoes_cliente(client, codigo: int) -> pd.DataFrame:
         SELECT DataSessao, NomeAnimal, ProdutoServico, Valor, Parcial
         FROM {V_SESSOES} WHERE CodigoCliente = @codigo ORDER BY DataSessao, Venda""",
               codigo=("INT64", int(codigo))).to_dataframe()
+
+
+def sessoes_clientes(client, codigos: list[int]) -> pd.DataFrame:
+    """Sessoes em aberto de VARIOS clientes numa query so (para montar as mensagens)."""
+    cfg = bigquery.QueryJobConfig(
+        query_parameters=[bigquery.ArrayQueryParameter("codigos", "INT64", [int(c) for c in codigos])])
+    return client.query(f"""
+        SELECT CodigoCliente, DataSessao, NomeAnimal, ProdutoServico, Valor, Parcial
+        FROM {V_SESSOES} WHERE CodigoCliente IN UNNEST(@codigos)
+        ORDER BY CodigoCliente, DataSessao, Venda""", job_config=cfg).result().to_dataframe()
+
+
+def mensagens_df(client, tabela: str | None = None) -> pd.DataFrame:
+    t = tabela or T_MENSAGENS
+    return _q(client, f"SELECT Nome, Texto, EhInicial, Ativo, AtualizadoEm FROM {t} ORDER BY EhInicial DESC, Nome").to_dataframe()
+
+
+def salvar_mensagem(client, nome: str, texto: str, ativo: bool = True, eh_inicial: bool = False,
+                    tabela: str | None = None) -> None:
+    """Cria ou atualiza um modelo (MERGE pela chave Nome). So uma mensagem pode ser a inicial: marcar esta
+    desmarca as outras. Modelos nao sao apagados (envios guardam o nome); desative com ativo=False.
+    `tabela` so existe para os testes usarem uma copia descartavel."""
+    t = tabela or T_MENSAGENS
+    nome = (nome or "").strip()
+    if not nome or len(nome) > 60:
+        raise ValueError("Dê um nome à mensagem (até 60 caracteres).")
+    if not (texto or "").strip():
+        raise ValueError("O texto da mensagem não pode ficar vazio.")
+    params = dict(nome=("STRING", nome), texto=("STRING", texto), ini=("BOOL", bool(eh_inicial)), ativo=("BOOL", bool(ativo)))
+    _q(client, f"""
+        MERGE {t} T USING (SELECT @nome AS Nome) S ON T.Nome = S.Nome
+        WHEN MATCHED THEN UPDATE SET Texto = @texto, EhInicial = @ini, Ativo = @ativo, AtualizadoEm = CURRENT_TIMESTAMP()
+        WHEN NOT MATCHED THEN INSERT (Nome, Texto, EhInicial, Ativo, AtualizadoEm)
+             VALUES (@nome, @texto, @ini, @ativo, CURRENT_TIMESTAMP())""", **params)
+    if eh_inicial:
+        _q(client, f"UPDATE {t} SET EhInicial = FALSE, AtualizadoEm = CURRENT_TIMESTAMP() WHERE Nome <> @nome AND EhInicial",
+           nome=("STRING", nome))
+
+
+def registrar_envio(client, codigo: int, ciclo: date, mensagem_nome: str, nome_contato: str | None,
+                    telefone: str | None, valor, texto: str) -> str:
+    """Grava que a mensagem foi enviada (o usuario confirma; abrir o link nao grava nada). Devolve o EnvioId."""
+    envio_id = uuid.uuid4().hex
+    _q(client, f"""
+        INSERT INTO {T_ENVIOS}
+            (EnvioId, CodigoCliente, MesReferencia, MensagemNome, EnviadoEm, NomeContato, TelefoneWhatsapp, ValorNoEnvio, TextoEnviado)
+        VALUES (@id, @codigo, @ciclo, @msg, CURRENT_TIMESTAMP(), @nome, @tel, @valor, @texto)""",
+       id=("STRING", envio_id), codigo=("INT64", int(codigo)), ciclo=("DATE", ciclo), msg=("STRING", mensagem_nome),
+       nome=("STRING", nome_contato), tel=("STRING", telefone),
+       valor=("NUMERIC", Decimal(str(round(float(valor), 2)))), texto=("STRING", texto))
+    return envio_id
+
+
+def desfazer_ultimo_envio(client, codigo: int, ciclo: date) -> int:
+    """Apaga o envio mais recente do cliente neste ciclo (para corrigir um 'marcar como enviado' por engano).
+    E a unica excecao a 'envios so recebe insercao'. Devolve quantas linhas apagou."""
+    return _dml(client, f"""
+        DELETE FROM {T_ENVIOS}
+        WHERE EnvioId = (SELECT EnvioId FROM {T_ENVIOS}
+                         WHERE CodigoCliente = @codigo AND MesReferencia = @ciclo
+                         ORDER BY EnviadoEm DESC LIMIT 1)""",
+                codigo=("INT64", int(codigo)), ciclo=("DATE", ciclo))
 
 
 def contatos_df(client) -> pd.DataFrame:

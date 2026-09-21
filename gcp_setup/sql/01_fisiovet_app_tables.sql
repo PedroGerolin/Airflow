@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS `gerolingcp.FisioVet_App.ciclos` (
 
 CREATE TABLE IF NOT EXISTS `gerolingcp.FisioVet_App.mensagens` (
   Nome STRING NOT NULL OPTIONS(description='PK logica. Ex.: Inicial, Lembrete'),
-  Texto STRING NOT NULL OPTIONS(description='Marcadores: {nome_contato} {nome_cliente} {animais} {mes} {lista_sessoes} {total} {pix}'),
+  Texto STRING NOT NULL OPTIONS(description='Marcadores: {nome_contato} {nome_cliente} {animais} {mes} {lista_sessoes} {total}'),
   EhInicial BOOL NOT NULL OPTIONS(description='Mensagem padrao de quem ainda nao foi cobrado no ciclo (so uma verdadeira)'),
   Ativo BOOL NOT NULL,
   AtualizadoEm TIMESTAMP
@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS `gerolingcp.FisioVet_App.envios` (
 ) OPTIONS(description='Historico de cobrancas enviadas. So insercao');
 
 CREATE TABLE IF NOT EXISTS `gerolingcp.FisioVet_App.configuracoes` (
-  Chave STRING NOT NULL OPTIONS(description='PK logica. Ex.: pix'),
+  Chave STRING NOT NULL OPTIONS(description='PK logica. Ex.: chave de ajuste futuro'),
   Valor STRING,
   AtualizadoEm TIMESTAMP
-) OPTIONS(description='Pares chave/valor (ex.: pix = CNPJ). Fica fora do repo publico');
+) OPTIONS(description='Pares chave/valor (reservada; sem uso hoje). Fica fora do repo publico');

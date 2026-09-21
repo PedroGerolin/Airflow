@@ -38,7 +38,7 @@ def test_app_sem_ciclo():
     assert any("Nenhum ciclo iniciado" in w.value for w in at.sidebar.warning)
     assert any("Iniciar cobrança de" in b.label for b in at.sidebar.button)
     assert any("Inicie a cobrança" in i.value for i in at.info), "fila deveria orientar a iniciar o ciclo"
-    assert len(at.tabs) == 2
+    assert len(at.tabs) == 3
 
 
 def test_app_inicia_ciclo_e_mostra_fila():
@@ -64,7 +64,54 @@ def test_app_inicia_ciclo_e_mostra_fila():
 def test_aba_contatos_renderiza():
     at = _app().run()
     assert not at.exception, at.exception
-    assert len(at.tabs) == 2
+    assert len(at.tabs) == 3
+
+
+def test_aba_mensagens_previa_e_marcador_desconhecido():
+    """So leitura: mostra o modelo, renderiza a previa sem marcador sobrando e avisa de marcador desconhecido."""
+    at = _app().run()
+    assert not at.exception, at.exception
+    at.selectbox(key="msg_editar").select("Inicial").run()
+    assert not at.exception, at.exception
+    texto = at.text_area(key="m_texto_Inicial")
+    assert "{lista_sessoes}" in texto.value and "{animais}" in texto.value
+    previas = [c.value for c in at.code if "Bom dia" in c.value]
+    assert previas and "{" not in previas[0], "a previa tem que ter todos os marcadores resolvidos"
+    assert not any("não conhece" in w.value for w in at.warning), "modelo padrao nao tem marcador desconhecido"
+    texto.input("Oi {nome_contato}, chave {pix} e {total}").run()   # nao salva: so digita
+    assert not at.exception, at.exception
+    assert any("pix" in w.value for w in at.warning), "deveria avisar do marcador {pix}, que nao existe mais"
+
+
+def test_painel_de_envio_marca_e_desfaz():
+    """Injeta mensagens prontas de um cliente de mentira (-1) e testa 'Marcar como enviado' e 'Desfazer'."""
+    c = repo.get_client()
+    if not repo.ciclos_iniciados(c):
+        print("  (pulado: precisa de um ciclo real iniciado para a fila aparecer)")
+        return
+    item = {"codigo": -1, "cliente": "Cliente de Teste", "animais": "Mel", "contato": "Maria", "telefone": "5511999999999",
+            "texto": "Bom dia, Maria!", "url": "https://wa.me/5511999999999?text=Bom%20dia", "texto_no_link": True,
+            "total": 10.5, "ja_recebeu": False}
+    sem_fone = dict(item, codigo=-2, telefone=None, url=None, texto_no_link=False)
+    at = _app()
+    at.session_state["preparados"] = {"mensagem": "Inicial", "ciclo": date(1999, 1, 1), "ignorados": 1, "itens": [item, sem_fone]}
+    at.session_state["enviados"] = set()
+    n = lambda: list(repo._q(c, f"SELECT COUNT(*) AS n FROM {repo.T_ENVIOS} WHERE CodigoCliente = -1"))[0]["n"]
+    try:
+        at.run()
+        assert not at.exception, at.exception
+        assert any("Mensagens prontas" in s.value for s in at.subheader)
+        assert at.button(key="env_-2").disabled, "sem telefone valido nao pode marcar como enviado"
+        assert n() == 0
+        at.button(key="env_-1").click().run()
+        assert not at.exception, at.exception
+        assert n() == 1, "Marcar como enviado grava em envios"
+        assert any("Enviado" in s.value for s in at.success)
+        at.button(key="des_-1").click().run()
+        assert not at.exception, at.exception
+        assert n() == 0, "Desfazer apaga o envio"
+    finally:
+        repo._q(c, f"DELETE FROM {repo.T_ENVIOS} WHERE CodigoCliente = @k", k=("INT64", -1))
 
 
 if __name__ == "__main__":

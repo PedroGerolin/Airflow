@@ -73,6 +73,64 @@ def test_rotulos_de_nota_fiscal():
         raise AssertionError("rotulo invalido deveria ser rejeitado")
 
 
+def _sessoes(*linhas):
+    return pd.DataFrame(linhas, columns=["DataSessao", "NomeAnimal", "ProdutoServico", "Valor", "Parcial"])
+
+
+def test_juntar_lista_e_meses():
+    assert repo.juntar_lista([]) == "" and repo.juntar_lista(["Mel"]) == "Mel"
+    assert repo.juntar_lista(["Mel", "Thor"]) == "Mel e Thor"
+    assert repo.juntar_lista(["A", "B", "C"]) == "A, B e C"
+    assert repo.juntar_lista(["Mel", "", None]) == "Mel", "vazio e None nao viram texto ('None')"
+    assert repo.mes_extenso(date(2026, 8, 1)) == "agosto de 2026"
+    assert repo.mes_extenso(date(2026, 3, 1)) == "março de 2026"
+
+
+def test_marcadores_desconhecidos():
+    assert repo.marcadores_desconhecidos("Oi {nome_contato}, {total} {mes} {animais} {lista_sessoes} {nome_cliente}") == []
+    assert repo.marcadores_desconhecidos("Chave {pix} e {nome_contat} e {pix}") == ["pix", "nome_contat"]
+    assert repo.marcadores_desconhecidos("") == [] and repo.marcadores_desconhecidos(None) == []
+
+
+def test_formatar_sessoes_um_mes():
+    s = _sessoes((date(2026, 8, 12), "Thor", "Acupuntura", 150, True), (date(2026, 8, 5), "Mel", "Fisioterapia", 120, False))
+    assert repo.formatar_sessoes(s) == ("05/08 - Mel - Fisioterapia - R$ 120,00\n"
+                                        "12/08 - Thor - Acupuntura - R$ 150,00 (baixa parcial)")
+    assert repo.formatar_sessoes(_sessoes()) == ""
+
+
+def test_formatar_sessoes_varios_meses_com_subtotal():
+    s = _sessoes((date(2026, 8, 5), "Mel", "Fisioterapia", 120, False), (date(2026, 7, 10), "Mel", "Fisioterapia", 100.5, False),
+                 (date(2026, 7, 20), "Mel", "Fisioterapia", 100, False))
+    esperado = ("*Julho/2026*\n10/07 - Mel - Fisioterapia - R$ 100,50\n20/07 - Mel - Fisioterapia - R$ 100,00\n"
+                "Subtotal: R$ 200,50\n\n"
+                "*Agosto/2026*\n05/08 - Mel - Fisioterapia - R$ 120,00\nSubtotal: R$ 120,00")
+    assert repo.formatar_sessoes(s) == esperado
+
+
+def test_montar_contexto_e_renderizar():
+    s = _sessoes((date(2026, 8, 5), "Thor", "Fisioterapia", 120, False), (date(2026, 8, 6), "Mel", "Acupuntura", 80, False))
+    linha = {"NomeContato": "Maria", "NomeCliente": "Maria da Silva", "MesCiclo": date(2026, 8, 1), "TotalEmAberto": 200}
+    ctx = repo.montar_contexto(linha, s)
+    assert ctx["animais"] == "Mel e Thor" and ctx["mes"] == "agosto de 2026" and ctx["total"] == "R$ 200,00"
+    texto = "Bom dia, {nome_contato}! Sessões de {animais} até {mes}:\n{lista_sessoes}\n*Total: {total}* {pix}"
+    r = repo.renderizar_mensagem(texto, ctx)
+    assert r.startswith("Bom dia, Maria! Sessões de Mel e Thor até agosto de 2026:\n05/08 - Thor")
+    assert "*Total: R$ 200,00*" in r and "{pix}" in r, "marcador desconhecido fica como esta (aparece na conferencia)"
+    # valor com chaves nao e reprocessado (uma passada so)
+    assert repo.renderizar_mensagem("{nome_contato}", {"nome_contato": "{total}", "total": "X"}) == "{total}"
+
+
+def test_link_whatsapp():
+    url, com_texto = repo.link_whatsapp("5511999999999", "Olá!\n*Total*: R$ 1,00")
+    assert com_texto and url.startswith("https://wa.me/5511999999999?text=")
+    assert "%0A" in url and "%2A" in url and "%C3%A1" in url, "quebra de linha, asterisco e acento precisam ir codificados"
+    assert " " not in url and "\n" not in url
+    longo, incluido = repo.link_whatsapp("5511999999999", "x" * 3000)
+    assert longo == "https://wa.me/5511999999999" and incluido is False, "texto longo: link sem texto"
+    assert repo.link_whatsapp("5511999999999", None) == ("https://wa.me/5511999999999", False)
+
+
 def test_resumo_por_estado():
     df = pd.DataFrame({"EstadoFila": ["A_COBRAR", "A_COBRAR", "COBRADO"], "TotalEmAberto": [100.0, 50.5, 10.0]})
     r = repo.resumo_por_estado(df)
@@ -90,6 +148,7 @@ def _cliente():
 def _limpar(c):
     repo._q(c, f"DELETE FROM {repo.T_CICLOS} WHERE MesReferencia = @m", m=("DATE", MES_TESTE))
     repo._q(c, f"DELETE FROM {repo.T_CONTATOS} WHERE CodigoCliente = @k", k=("INT64", SENTINELA))
+    repo._q(c, f"DELETE FROM {repo.T_ENVIOS} WHERE CodigoCliente = @k", k=("INT64", SENTINELA))
 
 
 def test_ciclo_idempotente():
@@ -173,6 +232,77 @@ def test_nota_fiscal():
         assert "NotaFiscal" in repo.contatos_df(c).columns
     finally:
         _limpar(c)
+
+
+def test_envios_registrar_e_desfazer():
+    c = _cliente()
+    try:
+        id1 = repo.registrar_envio(c, SENTINELA, MES_TESTE, "Inicial", "Maria", "5511999999999", 630.5, "texto 1 — ação")
+        id2 = repo.registrar_envio(c, SENTINELA, MES_TESTE, "Lembrete", "Maria", "5511999999999", 630.5, "texto 2")
+        assert id1 != id2
+        df = repo._q(c, f"SELECT * FROM {repo.T_ENVIOS} WHERE CodigoCliente = @k ORDER BY EnviadoEm", k=("INT64", SENTINELA)).to_dataframe()
+        assert len(df) == 2 and df.iloc[0]["MensagemNome"] == "Inicial" and df.iloc[0]["TextoEnviado"] == "texto 1 — ação"
+        assert float(df.iloc[0]["ValorNoEnvio"]) == 630.5 and df.iloc[0]["MesReferencia"] == MES_TESTE
+        assert repo.desfazer_ultimo_envio(c, SENTINELA, MES_TESTE) == 1
+        resto = repo._q(c, f"SELECT MensagemNome FROM {repo.T_ENVIOS} WHERE CodigoCliente = @k", k=("INT64", SENTINELA)).to_dataframe()
+        assert resto["MensagemNome"].tolist() == ["Inicial"], "desfazer apaga o MAIS RECENTE"
+        assert repo.desfazer_ultimo_envio(c, SENTINELA, MES_TESTE) == 1
+        assert repo.desfazer_ultimo_envio(c, SENTINELA, MES_TESTE) == 0, "sem envios: nada a desfazer"
+        assert repo.desfazer_ultimo_envio(c, SENTINELA, date(1999, 2, 1)) == 0, "outro ciclo nao e afetado"
+    finally:
+        _limpar(c)
+
+
+def test_mensagens_crud_e_uma_inicial_so():
+    c = _cliente()
+    tabela = f"`{repo.PROJECT}.FisioVet_App.mensagens_teste`"   # copia descartavel: nunca mexe nos modelos reais
+    repo._q(c, f"DROP TABLE IF EXISTS {tabela}")
+    repo._q(c, f"CREATE TABLE {tabela} LIKE {repo.T_MENSAGENS}")
+    try:
+        repo.salvar_mensagem(c, "A", "texto A", eh_inicial=True, tabela=tabela)
+        repo.salvar_mensagem(c, "B", "texto B", eh_inicial=False, tabela=tabela)
+        df = repo.mensagens_df(c, tabela)
+        assert len(df) == 2 and df[df["EhInicial"]]["Nome"].tolist() == ["A"]
+        repo.salvar_mensagem(c, "B", "texto B novo", eh_inicial=True, tabela=tabela)
+        df = repo.mensagens_df(c, tabela)
+        assert len(df) == 2, "MERGE nao duplica"
+        assert df[df["EhInicial"]]["Nome"].tolist() == ["B"], "marcar B como inicial desmarca A"
+        assert df[df["Nome"] == "B"].iloc[0]["Texto"] == "texto B novo"
+        repo.salvar_mensagem(c, "A", "texto A", ativo=False, tabela=tabela)
+        assert bool(repo.mensagens_df(c, tabela).set_index("Nome").loc["A", "Ativo"]) is False
+        for nome, texto in (("", "x"), ("   ", "x"), ("C", ""), ("C", "   "), ("x" * 61, "x")):
+            try:
+                repo.salvar_mensagem(c, nome, texto, tabela=tabela)
+            except ValueError:
+                continue
+            raise AssertionError(f"deveria rejeitar nome={nome!r} texto={texto!r}")
+    finally:
+        repo._q(c, f"DROP TABLE IF EXISTS {tabela}")
+
+
+def test_mensagens_reais_para_a_fila():
+    """So leitura, com o ciclo real: monta a mensagem de cada cliente da fila e confere consistencia."""
+    c = _cliente()
+    if not repo.ciclos_iniciados(c):
+        print("  (pulado: nenhum ciclo iniciado)")
+        return
+    fila = repo.fila(c)
+    if fila.empty:
+        return
+    todas = repo.sessoes_clientes(c, fila["CodigoCliente"].astype(int).tolist())
+    modelo = "{nome_contato}|{nome_cliente}|{animais}|{mes}|{lista_sessoes}|{total}"
+    for _, linha in fila.iterrows():
+        s = todas[todas["CodigoCliente"] == linha["CodigoCliente"]]
+        assert len(s) == int(linha["QtdSessoes"])
+        assert abs(float(sum(s["Valor"])) - float(linha["TotalEmAberto"])) < 0.005, "soma das sessoes = total da fila"
+        msg = repo.renderizar_mensagem(modelo, repo.montar_contexto(linha, s))
+        assert "{" not in msg, f"marcador nao resolvido: {msg!r}"
+        assert repo.brl(linha["TotalEmAberto"]) in msg
+        assert msg.count(" - R$ ") == len(s), "uma linha por sessao"
+        url, _ = repo.link_whatsapp(linha["TelefoneWhatsapp"] or "0", msg)
+        assert url.startswith("https://wa.me/")
+    for m in repo.mensagens_df(c).itertuples():
+        assert repo.marcadores_desconhecidos(m.Texto) == [], f"modelo {m.Nome!r} tem marcador desconhecido"
 
 
 def test_parametros_nao_sao_injecao():

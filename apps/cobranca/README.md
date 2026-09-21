@@ -27,5 +27,9 @@ precisam de um ciclo real só rodam se ainda **não** houver ciclo iniciado.
   (edição em tabela).
 - Versão do Streamlit **fixada** em `requirements.txt` (a API de tabelas com seleção muda entre versões).
 
-## O que a v1 NÃO faz (v2)
-Modelos de mensagem, seleção da mensagem por cliente, links `wa.me` e registro de envios (`envios`).
+## Fluxo de envio (WhatsApp por link `wa.me`, custo zero)
+1. Na **Fila**, selecione clientes → escolha a mensagem (sugerida: a inicial para quem ainda não foi cobrado) → **Preparar**.
+2. O painel mostra, por cliente, o texto pronto e **Abrir WhatsApp**; envie lá e volte para **Marcar como enviado** (só esse botão
+   registra em `envios`; **Desfazer** corrige um engano).
+3. Cliente em "não cobrar" ou incobrável fica de fora; sem telefone válido não dá para marcar. Filtro **Cobrados há ≥ N dias** para os lembretes.
+Marcadores: `{nome_contato} {nome_cliente} {animais} {mes} {lista_sessoes} {total}`. Modelos editáveis na aba **Mensagens** (com prévia).
