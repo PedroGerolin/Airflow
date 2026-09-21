@@ -61,3 +61,45 @@ foreach ($ds in @("FisioVet","FisioVet_Analytics")) {
 gcloud iam service-accounts keys create "C:\Airflow\credential\metabase-reader.json" --iam-account="metabase-reader@gerolingcp.iam.gserviceaccount.com" --project gerolingcp
 ```
 Verificar: `bq show --format=prettyjson gerolingcp:FisioVet` deve listar `role: READER` pra essa SA.
+
+## 4. App de cobranca (Streamlit): dataset `FisioVet_App` + Service Account `cobranca-app`
+
+Desenho e regras: `ROADMAP.md` (secao "Cobranca por WhatsApp"), na pasta de estudos do usuario (fora do repo).
+Dataset **separado** de `FisioVet_Analytics` de proposito: o dbt recria as tabelas do Analytics, entao
+nada que o usuario edita pode morar la. Os dados (contatos, envios) **nunca** vao pro repo; so o SQL.
+
+Comandos executados em 21/09/2026 (Git Bash, conta owner). `bq`/`gcloud` no PATH.
+```bash
+# dataset (mesma regiao dos outros: US)
+bq mk --dataset --project_id=gerolingcp --location=US --description="App de cobranca (Streamlit): tabelas escritas pelo app. O dbt nao escreve aqui." gerolingcp:FisioVet_App
+
+# service account do app + permissoes minimas
+gcloud iam service-accounts create cobranca-app --project gerolingcp --display-name="App de cobranca (Streamlit)"
+SA="cobranca-app@gerolingcp.iam.gserviceaccount.com"
+gcloud projects add-iam-policy-binding gerolingcp --member="serviceAccount:$SA" --role="roles/bigquery.jobUser" --condition=None
+# escrita SO no dataset do app; leitura nos dois datasets do pipeline (DCL, com a conta owner)
+bq query --project_id=gerolingcp --location=US --nouse_legacy_sql "GRANT \`roles/bigquery.dataEditor\` ON SCHEMA \`gerolingcp.FisioVet_App\` TO 'serviceAccount:$SA'"
+for ds in FisioVet FisioVet_Analytics; do
+  bq query --project_id=gerolingcp --location=US --nouse_legacy_sql "GRANT \`roles/bigquery.dataViewer\` ON SCHEMA \`gerolingcp.$ds\` TO 'serviceAccount:$SA'"
+done
+
+# tabelas e dados iniciais (scripts versionados em gcp_setup/sql/, rodar nesta ordem)
+for f in 01_fisiovet_app_tables 02_seed_mensagens 03_seed_contatos; do
+  SQL=$'\n'"$(cat gcp_setup/sql/$f.sql)"      # ver armadilha 1 abaixo
+  bq query --project_id=gerolingcp --location=US --nouse_legacy_sql "$SQL"
+done
+
+# chave JSON (fica em credential/, gitignorado; o conteudo nunca vai pro chat/git)
+gcloud iam service-accounts keys create "C:\Airflow\credential\cobranca-app.json" --iam-account="$SA" --project gerolingcp
+```
+Estado final: `cobranca-app` = `bigquery.jobUser` (projeto) + `dataEditor` em `FisioVet_App` + `dataViewer` em
+`FisioVet` e `FisioVet_Analytics`. Verificado usando a propria chave: le os 3 datasets, escreve so em
+`FisioVet_App`, e leva `403 Permission bigquery.tables.updateData denied` ao tentar escrever nos outros dois.
+
+**Armadilhas encontradas**
+1. `bq query` trata um argumento que **comeca com `--`** como flag: o SQL comeca com comentario `--`, entao
+   prefixe uma quebra de linha (`$'\n'"$(cat arquivo)"`). Passar por argumento (e nao por stdin) manteve os acentos.
+2. No BigQuery, `NOT NULL DEFAULT 'x'` na mesma coluna e erro de sintaxe; o app preenche os valores, sem `DEFAULT`.
+3. O `03_seed_contatos.sql` roda `INSERT ... SELECT` dentro do BigQuery: telefones de clientes nao passam por
+   arquivo nem pelo repo. E idempotente (`NOT EXISTS`).
+Recriar em outro projeto: trocar `gerolingcp` nos comandos e nos `.sql`, e rodar tudo de novo.
