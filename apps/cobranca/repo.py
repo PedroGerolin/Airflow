@@ -186,7 +186,7 @@ def _garantir_contato(client, codigo: int) -> None:
     _q(client, f"""
         INSERT INTO {T_CONTATOS}
             (CodigoCliente, NomeContato, TelefoneWhatsapp, Situacao, NaoCobrarNoCiclo, Observacao, RevisadoEm, AtualizadoEm)
-        SELECT CAST(c.Codigo AS INT64), c.Nome, {_SQL_TEL_CADASTRO}, 'ATIVO',
+        SELECT CAST(c.Codigo AS INT64), INITCAP(SPLIT(TRIM(c.Nome), ' ')[SAFE_OFFSET(0)]), {_SQL_TEL_CADASTRO}, 'ATIVO',
                CAST(NULL AS DATE), CAST(NULL AS STRING), CAST(NULL AS TIMESTAMP), CURRENT_TIMESTAMP()
         FROM {T_CLIENTS} c
         WHERE CAST(c.Codigo AS INT64) = @codigo

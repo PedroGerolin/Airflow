@@ -11,12 +11,15 @@
      NAO_COBRAR_NO_CICLO  contatos.NaoCobrarNoCiclo = ciclo atual (expira sozinho no ciclo seguinte)
      COBRADO              ja tem ao menos 1 envio NESTE ciclo
      A_COBRAR             nenhum envio neste ciclo
-   Contato: usa contatos (app) e, se o cliente nao tiver linha la, o telefone do cadastro do Simples Vet. #}
+   Contato: usa contatos (app) e, se o cliente nao tiver linha la, o telefone do cadastro do Simples Vet e o
+   PRIMEIRO NOME do cliente. NomeContato = "como chamar" na mensagem ({nome_contato}). Animais = os animais com
+   sessao em aberto (marcador {animais}; o app junta com " e "). #}
 WITH sessoes AS (
     SELECT
         CodigoCliente,
         ANY_VALUE(NomeCliente) AS NomeCliente,
         ANY_VALUE(MesCiclo) AS MesCiclo,
+        STRING_AGG(DISTINCT NomeAnimal, ', ' ORDER BY NomeAnimal) AS Animais,
         COUNT(*) AS QtdSessoes,
         SUM(Valor) AS TotalEmAberto,
         LOGICAL_OR(Parcial) AS TemBaixaParcial,
@@ -48,12 +51,13 @@ SELECT
     P.CodigoCliente,
     P.NomeCliente,
     P.MesCiclo,
+    P.Animais,
     P.QtdSessoes,
     P.TotalEmAberto,
     P.TemBaixaParcial,
     P.MesMaisAntigo,
     P.SessaoMaisAntiga,
-    COALESCE(T.NomeContato, P.NomeCliente) AS NomeContato,
+    COALESCE(T.NomeContato, INITCAP(SPLIT(TRIM(P.NomeCliente), ' ')[SAFE_OFFSET(0)])) AS NomeContato,
     COALESCE(T.TelefoneWhatsapp, K.TelefoneCadastro) AS TelefoneWhatsapp,
     COALESCE(REGEXP_CONTAINS(COALESCE(T.TelefoneWhatsapp, K.TelefoneCadastro), r'^55\d{10,11}$'), FALSE) AS TelefoneValido,
     IF(T.CodigoCliente IS NOT NULL, 'APP', 'CADASTRO') AS OrigemContato,

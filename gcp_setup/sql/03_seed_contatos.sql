@@ -3,7 +3,7 @@
 -- o INSERT ... SELECT roda dentro do BigQuery.
 -- - Telefone: primeiro celular (9 digitos, comeca com 9) do texto livre "(11) 99999-9999, (11) 3333-3333";
 --   vira digitos com DDI (55...). Sem celular valido => NULL (o app avisa "sem telefone valido").
--- - NomeContato: o proprio cliente (o usuario troca na tela quando for outra pessoa).
+-- - NomeContato = "como chamar" na mensagem: primeiro nome do cliente (o usuario troca na tela quando for outra pessoa).
 -- - RevisadoEm NULL: o usuario ainda nao conferiu.
 -- Idempotente: nao mexe em quem ja tem linha.
 INSERT INTO `gerolingcp.FisioVet_App.contatos`
@@ -20,7 +20,7 @@ cadastro AS (
 )
 SELECT
   d.CodigoCliente,
-  c.Nome,
+  INITCAP(SPLIT(TRIM(c.Nome), ' ')[SAFE_OFFSET(0)]),
   CONCAT('55', REGEXP_REPLACE(REGEXP_EXTRACT(c.Telefone, r'(\(\d{2}\)\s*9\d{4}-?\d{4})'), r'\D', '')),
   'ATIVO',
   CAST(NULL AS DATE),

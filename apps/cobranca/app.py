@@ -75,7 +75,8 @@ def avisos_da_linha(linha) -> str:
 def montar_tabela(fila: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame({
         "Cliente": fila["NomeCliente"],
-        "Contato": fila["NomeContato"],
+        "Animais": fila["Animais"].fillna("").str.replace(", ", " e ", regex=False),
+        "Como chamar": fila["NomeContato"],
         "WhatsApp": fila["TelefoneWhatsapp"].map(repo.formatar_telefone),
         "Sessões": fila["QtdSessoes"],
         "Total em aberto": fila["TotalEmAberto"].map(repo.brl),
@@ -202,7 +203,9 @@ def detalhe_cliente(c, linha):
     with dir_:
         st.markdown("**Contato de cobrança**")
         with st.form(f"contato_{codigo}"):
-            nome = st.text_input("Nome de quem recebe", value=linha["NomeContato"] or "")
+            nome = st.text_input("Como chamar na mensagem", value=linha["NomeContato"] or "",
+                                 help="Só o primeiro nome, ou quem recebe a cobrança, como você diria no "
+                                      "cumprimento (ex.: Maria, Sr. Carlos). Vira {nome_contato} na mensagem.")
             tel = st.text_input("WhatsApp (DDD + número)", value=repo.formatar_telefone(linha["TelefoneWhatsapp"]))
             obs = st.text_input("Observação", value=linha["Observacao"] or "")
             rev = st.checkbox("Marcar como conferido", value=True)
@@ -228,12 +231,13 @@ def aba_contatos(c):
     vis = df[~df["Revisado"]] if so_pendentes else df
     vis = vis.reset_index(drop=True)
     st.caption(f"{len(vis)} de {len(df)} contato(s). Edite direto na tabela e clique em Salvar. "
+               "“Como chamar” é o nome usado no cumprimento da mensagem (só o primeiro nome, ou quem recebe). "
                "Telefone: DDD + número. Situação INCOBRAVEL tira o cliente da fila em todos os ciclos.")
 
     base = pd.DataFrame({
         "CodigoCliente": vis["CodigoCliente"],
         "Cliente": vis["NomeCliente"],
-        "Contato": vis["NomeContato"],
+        "Como chamar": vis["NomeContato"],
         "WhatsApp": vis["TelefoneWhatsapp"].map(repo.formatar_telefone),
         "Situacao": vis["Situacao"],
         "Observacao": vis["Observacao"],
@@ -263,7 +267,7 @@ def aba_contatos(c):
             for coluna, valor in mudancas.items():
                 linha[coluna] = valor
             try:
-                repo.salvar_contato(c, int(linha["CodigoCliente"]), linha["Contato"], linha["WhatsApp"],
+                repo.salvar_contato(c, int(linha["CodigoCliente"]), linha["Como chamar"], linha["WhatsApp"],
                                     linha["Observacao"], bool(linha["Conferido"]))
                 if "Situacao" in mudancas:
                     repo.definir_situacao(c, int(linha["CodigoCliente"]), linha["Situacao"])

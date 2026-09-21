@@ -5,7 +5,7 @@
 
 CREATE TABLE IF NOT EXISTS `gerolingcp.FisioVet_App.contatos` (
   CodigoCliente INT64 NOT NULL OPTIONS(description='PK logica. Mesmo codigo do Simples Vet (clients.Codigo)'),
-  NomeContato STRING OPTIONS(description='Quem recebe a cobranca (o proprio cliente, familiar, secretaria...)'),
+  NomeContato STRING OPTIONS(description='Como chamar a pessoa na mensagem (ex.: so o primeiro nome). Vira {nome_contato}'),
   TelefoneWhatsapp STRING OPTIONS(description='So digitos com DDI, ex.: 5511999999999'),
   Situacao STRING NOT NULL OPTIONS(description='ATIVO ou INCOBRAVEL. Incobravel some da fila'),
   NaoCobrarNoCiclo DATE OPTIONS(description='Se igual ao MesReferencia do ciclo atual: devendo, nao cobrar. Expira sozinho no ciclo seguinte'),
@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS `gerolingcp.FisioVet_App.ciclos` (
 
 CREATE TABLE IF NOT EXISTS `gerolingcp.FisioVet_App.mensagens` (
   Nome STRING NOT NULL OPTIONS(description='PK logica. Ex.: Inicial, Lembrete'),
-  Texto STRING NOT NULL OPTIONS(description='Marcadores: {nome_contato} {nome_cliente} {mes} {lista_sessoes} {total} {pix}'),
+  Texto STRING NOT NULL OPTIONS(description='Marcadores: {nome_contato} {nome_cliente} {animais} {mes} {lista_sessoes} {total} {pix}'),
   EhInicial BOOL NOT NULL OPTIONS(description='Mensagem padrao de quem ainda nao foi cobrado no ciclo (so uma verdadeira)'),
   Ativo BOOL NOT NULL,
   AtualizadoEm TIMESTAMP
