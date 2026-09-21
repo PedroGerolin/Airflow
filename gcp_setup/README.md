@@ -105,3 +105,27 @@ Estado final: `cobranca-app` = `bigquery.jobUser` (projeto) + `dataEditor` em `F
 5. O `03_seed_contatos.sql` roda `INSERT ... SELECT` dentro do BigQuery: telefones de clientes nao passam por
    arquivo nem pelo repo. E idempotente (`NOT EXISTS`).
 Recriar em outro projeto: trocar `gerolingcp` nos comandos e nos `.sql`, e rodar tudo de novo.
+
+## 5. Backup das tabelas do app (`FisioVet_App` → GCS)
+
+Vendas, clientes e faturamento são refeitos todo dia; **contatos, envios, ciclos, ciclos_historico e mensagens são o trabalho do usuário** e não
+existem em outro lugar (o BigQuery só guarda 7 dias de histórico). Por isso a DAG `fisiovet` tem a tarefa `backup_tabelas_do_app`
+(`plugins/common/backup.py`), um **ramo paralelo** `start_task → backup → end_task`: se falhar, a execução aparece como falha, sem bloquear o dbt.
+
+- **Onde:** `gs://gerolin_etl/_backup/FisioVet_App/AAAA-MM-DD/<tabela>/part-*.parquet` (Parquet preserva NUMERIC/TIMESTAMP/DATE). Tabela vazia é pulada.
+  Roda a cada execução da DAG; duas no mesmo dia sobrescrevem a mesma pasta. O código confere que o arquivo apareceu (senão levanta erro).
+- **Retenção:** regra de ciclo de vida de 90 dias **só** nesse prefixo (`gcp_setup/lifecycle_backup_app.json`):
+  ```bash
+  gcloud storage buckets update gs://gerolin_etl --lifecycle-file=gcp_setup/lifecycle_backup_app.json
+  # desfazer: gcloud storage buckets update gs://gerolin_etl --clear-lifecycle
+  ```
+  ⚠ o `--lifecycle-file` **substitui todas** as regras do bucket (em 21/09/2026 não havia outras). O soft delete de 7 dias do bucket segue valendo.
+- **Permissões:** usa a conexão `google_cloud_default` do Airflow (SA do ETL: `bigquery.dataEditor` + `jobUser` no projeto e `storage.objectAdmin` no bucket). Nada novo a conceder.
+- **Restaurar** (testado em 21/09/2026: 59 contatos, 1 ciclo e 2 mensagens voltaram com conteúdo idêntico):
+  ```bash
+  D=gs://gerolin_etl/_backup/FisioVet_App/2026-09-21
+  bq load --project_id=gerolingcp --location=US --source_format=PARQUET --replace \
+      gerolingcp:FisioVet_App.contatos_restaurada "$D/contatos/part-*.parquet"
+  # conferir a tabela _restaurada; depois: INSERT INTO ...contatos SELECT * FROM ...contatos_restaurada (na tabela recriada pelos scripts sql/)
+  ```
+  A tabela carregada do Parquet **não traz** as descrições/`NOT NULL` do DDL: para restaurar de verdade, recrie a tabela pelos scripts `sql/01…07` e insira a partir da `_restaurada`.

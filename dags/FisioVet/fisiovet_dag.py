@@ -3,6 +3,7 @@ import pendulum
 from common.file_transformer import FileTransformer
 from common.transfer import TransferFile
 from common.exporter import Exporter
+from common.backup import backup_app_tables
 from fisiovet.fisiovet_downloader import fisioVetDownloader
 from airflow.operators.empty import EmptyOperator
 from airflow.operators.bash import BashOperator
@@ -147,6 +148,13 @@ def fisiovet_dag():
              bash_command=f'dbt run --target dev_snowflake --profiles-dir {default_args["DBT_PROJECT_DIR"]} --project-dir {default_args["DBT_PROJECT_DIR"]}'
          )
 
+    @task()
+    def backup_tabelas_do_app():
+        # contatos, envios, ciclos, ciclos_historico e mensagens sao o trabalho do usuario (o pipeline nao os refaz):
+        # copia diaria para o GCS em Parquet (gs://gerolin_etl/_backup/FisioVet_App/AAAA-MM-DD/). Ramo paralelo:
+        # se falhar, a DAG aparece como falha (visibilidade) sem bloquear o download/dbt.
+        backup_app_tables()
+
     end_task = EmptyOperator(
             task_id = 'end_task'
         )
@@ -157,6 +165,8 @@ def fisiovet_dag():
     Label("Download dos arquivos") >> fisiovet_downloader() >> \
     Label("Buscar e Normalizar arquivos") >> file_transformation() >> \
     Label("Envio para GCS") >> file_transfer_group
+
+    start_task >> Label("Backup das tabelas do app") >> backup_tabelas_do_app() >> end_task
 
     file_transfer_group >> Label("Executa o DBT no BigQuery") >> dbt_run_bigquery >> end_task
     file_transfer_group >> Label("Executa o DBT no Snowflake") >> dbt_run_snowflake >> end_task

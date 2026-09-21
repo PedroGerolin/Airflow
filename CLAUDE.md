@@ -184,6 +184,13 @@ texto (o app mostra o texto para copiar). Testes de gravação usam cliente `-1`
 **Nota fiscal** (`contatos.NotaFiscal` = `COM_CPF`/`SEM_CPF`/vazio, permanente; `contatos.NFEmitidaNoCiclo` = mês do ciclo em que a NF foi
 emitida, **expira sozinha** no ciclo seguinte, como `NaoCobrarNoCiclo`). A view expõe `NotaFiscal`, `NFStatus` (NULL|PENDENTE|EMITIDA) e
 `TemCPF` (só sim/não — **o CPF não sai na view**, o Metabase lê esse dataset). Marcar "emitida" em quem não tem NF configurada é ignorado.
+**Backup das tabelas do app**: tarefa `backup_tabelas_do_app` da DAG (ramo paralelo) exporta `FisioVet_App` em Parquet para
+`gs://gerolin_etl/_backup/FisioVet_App/AAAA-MM-DD/` a cada execução (retenção 90 dias por regra de ciclo de vida; restauração testada —
+ver `gcp_setup/README.md`, seção 5). Essas tabelas são o trabalho do usuário e não são refeitas pelo pipeline.
+**Excluir venda no sistema não a apaga sozinha do warehouse**: (1) o dia sem nenhuma outra venda deixa o arquivo do GCS/partição antigos;
+(2) `faturamento_*` incrementais fazem upsert e NÃO apagam chave que deixou de existir → rodar `dbt run --full-refresh` nos dois targets;
+(3) apagar `envios`/`contatos` do cliente no app. Provar a limpeza procurando nº da venda e código do cliente em GCS, BQ, SF, faturamento e app
+(feito em 21/09/2026 com a venda de teste 11441).
 **Histórico de ciclos**: `contatos.NFEmitidaNoCiclo`/`NaoCobrarNoCiclo` só guardam o último ciclo, então ao **iniciar o ciclo seguinte** o app
 grava a "foto" do ciclo anterior em `ciclos_historico` (uma linha por cliente que devia, foi cobrado ou teve NF/pausa: nº de envios, valor
 cobrado, quanto ainda devia, NF, marcações; **só inserção**) e marca `ciclos.FechadoEm`. `repo.iniciar_novo_ciclo` fotografa PRIMEIRO e só depois
