@@ -191,12 +191,13 @@ def renderizar_mensagem(texto: str, contexto: dict) -> str:
 
 
 def link_whatsapp(telefone: str, texto: str | None = None) -> tuple[str, bool]:
-    """(url, texto_no_link). wa.me abre a conversa com o texto pronto; se a URL passar do limite,
-    devolve o link SEM texto (False) e o app mostra o texto para copiar."""
-    base = f"https://wa.me/{telefone}"
+    """(url, texto_no_link). Abre a conversa direto no WHATSAPP WEB (web.whatsapp.com/send) com o texto pronto.
+    O wa.me tentava abrir primeiro o app de computador e perguntava qual usar; o usuario usa a conta Business
+    no navegador. Se a URL passar do limite, devolve o link SEM texto (False) e o app mostra o texto para copiar."""
+    base = f"https://web.whatsapp.com/send?phone={telefone}"
     if not texto:
         return base, False
-    url = f"{base}?text={quote(texto, safe='')}"
+    url = f"{base}&text={quote(texto, safe='')}"
     if len(url) > LIMITE_URL_WHATSAPP:
         return base, False
     return url, True

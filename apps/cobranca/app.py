@@ -288,7 +288,8 @@ def painel_envio(c):
             st.session_state.pop("preparados", None)
             st.session_state.pop("enviados", None)
             st.rerun()
-        st.caption("1) Clique em **Abrir WhatsApp** e envie a mensagem lá. 2) Volte e clique em **Marcar como enviado**. "
+        st.caption("1) Clique em **Abrir WhatsApp Web** (abre a conversa no navegador, com o texto pronto; a conta precisa estar "
+                   "logada nesse navegador) e envie lá. 2) Volte e clique em **Marcar como enviado**. "
                    "Abrir o link não registra nada: só o botão registra.")
         if prep["ignorados"]:
             st.caption(f"{prep['ignorados']} cliente(s) ficaram de fora (“não cobrar” neste ciclo ou incobrável).")
@@ -302,7 +303,7 @@ def painel_envio(c):
                 st.code(item["texto"], language=None)
                 b1, b2, b3 = st.columns([1, 1, 2])
                 if item["url"]:
-                    b1.link_button("Abrir WhatsApp", item["url"])
+                    b1.link_button("Abrir WhatsApp Web", item["url"])
                     if not item["texto_no_link"]:
                         b3.caption("Mensagem longa: o link abre a conversa sem texto. Copie o texto acima e cole.")
                 else:

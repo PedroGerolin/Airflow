@@ -123,12 +123,14 @@ def test_montar_contexto_e_renderizar():
 
 def test_link_whatsapp():
     url, com_texto = repo.link_whatsapp("5511999999999", "Olá!\n*Total*: R$ 1,00")
-    assert com_texto and url.startswith("https://wa.me/5511999999999?text=")
+    assert com_texto and url.startswith("https://web.whatsapp.com/send?phone=5511999999999&text="), "abre direto no WhatsApp Web"
+    assert "wa.me" not in url
     assert "%0A" in url and "%2A" in url and "%C3%A1" in url, "quebra de linha, asterisco e acento precisam ir codificados"
     assert " " not in url and "\n" not in url
     longo, incluido = repo.link_whatsapp("5511999999999", "x" * 3000)
-    assert longo == "https://wa.me/5511999999999" and incluido is False, "texto longo: link sem texto"
-    assert repo.link_whatsapp("5511999999999", None) == ("https://wa.me/5511999999999", False)
+    base = "https://web.whatsapp.com/send?phone=5511999999999"
+    assert longo == base and incluido is False, "texto longo: link sem texto"
+    assert repo.link_whatsapp("5511999999999", None) == (base, False)
 
 
 def test_resumo_por_estado():
@@ -300,7 +302,7 @@ def test_mensagens_reais_para_a_fila():
         assert repo.brl(linha["TotalEmAberto"]) in msg
         assert msg.count(" - R$ ") == len(s), "uma linha por sessao"
         url, _ = repo.link_whatsapp(linha["TelefoneWhatsapp"] or "0", msg)
-        assert url.startswith("https://wa.me/")
+        assert url.startswith("https://web.whatsapp.com/send?phone=")
     for m in repo.mensagens_df(c).itertuples():
         assert repo.marcadores_desconhecidos(m.Texto) == [], f"modelo {m.Nome!r} tem marcador desconhecido"
 

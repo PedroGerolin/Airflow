@@ -90,7 +90,7 @@ def test_painel_de_envio_marca_e_desfaz():
         print("  (pulado: precisa de um ciclo real iniciado para a fila aparecer)")
         return
     item = {"codigo": -1, "cliente": "Cliente de Teste", "animais": "Mel", "contato": "Maria", "telefone": "5511999999999",
-            "texto": "Bom dia, Maria!", "url": "https://wa.me/5511999999999?text=Bom%20dia", "texto_no_link": True,
+            "texto": "Bom dia, Maria!", "url": "https://web.whatsapp.com/send?phone=5511999999999&text=Bom%20dia", "texto_no_link": True,
             "total": 10.5, "ja_recebeu": False}
     sem_fone = dict(item, codigo=-2, telefone=None, url=None, texto_no_link=False)
     at = _app()
