@@ -23,8 +23,8 @@ precisam de um ciclo real só rodam se ainda **não** houver ciclo iniciado.
 
 ## Estrutura
 - `repo.py`: toda a conversa com o BigQuery (queries parametrizadas; só DML, nunca streaming insert).
-- `app.py`: só a tela. Abas **Fila de cobrança** (ações em massa, contato do cliente, sessões) e **Contatos**
-  (edição em tabela).
+- `app.py`: só a tela. Abas **Fila de cobrança** (ações em massa, NF, envio), **Contatos** (edição em tabela), **Mensagens** (modelos + prévia)
+  e **Histórico** (foto de cada ciclo encerrado + envios). Ao iniciar o ciclo seguinte o app grava a foto do anterior em `ciclos_historico`.
 - Versão do Streamlit **fixada** em `requirements.txt` (a API de tabelas com seleção muda entre versões).
 
 ## Fluxo de envio (WhatsApp Web por link, custo zero)

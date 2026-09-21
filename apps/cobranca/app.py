@@ -48,6 +48,21 @@ def _mensagens(_c):
     return repo.mensagens_df(_c)
 
 
+@st.cache_data(ttl=30, show_spinner=False)
+def _ciclos_foto(_c):
+    return repo.ciclos_com_foto(_c)
+
+
+@st.cache_data(ttl=30, show_spinner=False)
+def _historico(_c, mes):
+    return repo.historico_df(_c, mes)
+
+
+@st.cache_data(ttl=30, show_spinner=False)
+def _envios_ciclo(_c, mes):
+    return repo.envios_do_ciclo(_c, mes)
+
+
 def avisar(texto: str):
     """Guarda uma mensagem para aparecer depois do proximo rerun (st.rerun apaga o que foi mostrado antes)."""
     st.session_state["aviso"] = texto
@@ -120,11 +135,16 @@ def barra_lateral(c, ciclo):
             st.divider()
             st.caption("Novo ciclo")
             if st.button(f"Iniciar cobrança de {repo.nome_mes(sugerido)}", type="primary"):
-                repo.iniciar_ciclo(c, sugerido)
-                avisar(f"Cobrança de {repo.nome_mes(sugerido)} iniciada.")
+                r = repo.iniciar_novo_ciclo(c, sugerido)
+                msg = f"Cobrança de {repo.nome_mes(sugerido)} iniciada."
+                if r["ciclo_fechado"]:
+                    msg += (f" A foto do ciclo de {repo.nome_mes(r['ciclo_fechado'])} foi gravada "
+                            f"({r['fotografados']} cliente(s)): veja na aba Histórico.")
+                avisar(msg)
                 recarregar()
-            st.caption("O corte anda para o fim desse mês, e o “não cobrar” do ciclo anterior expira. "
-                       "Quem ainda deve meses antigos continua na fila.")
+            st.caption("Antes de começar, o app grava a **foto do ciclo atual** (quem foi cobrado, NF, quem quitou) no "
+                       "histórico. Depois o corte anda para o fim do novo mês, e o “não cobrar” e a NF do ciclo anterior "
+                       "expiram. Quem ainda deve meses antigos continua na fila.")
         st.divider()
         if st.button("Atualizar dados"):
             recarregar()
@@ -507,6 +527,79 @@ def aba_mensagens(c, ciclo):
             recarregar()
 
 
+# ---------------------------------------------------------------- aba: historico
+
+def fmt_dt(ts) -> str:
+    if ts is None or pd.isna(ts):
+        return ""
+    return pd.Timestamp(ts).tz_convert(repo.TZ).strftime("%d/%m %H:%M")
+
+
+def nf_historico(linha) -> str:
+    nf = linha["NotaFiscal"]
+    if not isinstance(nf, str) or not nf:
+        return ""
+    return f"{'com CPF' if nf == 'COM_CPF' else 'sem CPF'} — {'emitida' if linha['NFEmitida'] else 'NÃO emitida'}"
+
+
+def aba_historico(c, ciclo):
+    todos = sorted(set(_ciclos(c)), reverse=True)
+    if not todos:
+        st.info("Nenhum ciclo iniciado ainda.")
+        return
+    fotos = _ciclos_foto(c)
+
+    def rotulo(mes):
+        return repo.nome_mes(mes) + (" — em andamento" if mes == ciclo else "") + (" — encerrado" if mes in fotos else "")
+
+    mes = st.selectbox("Ciclo", todos, format_func=rotulo, key="hist_ciclo")
+
+    if mes in fotos:
+        h = _historico(c, mes)
+        aberto = h[h["SituacaoFinal"] == "EM_ABERTO"]
+        precisam_nf = h[h["NotaFiscal"].notna()]
+        cols = st.columns(5)
+        cols[0].metric("Clientes no ciclo", len(h))
+        cols[1].metric("Cobrados", int((h["QtdEnvios"] > 0).sum()), f"{int(h['QtdEnvios'].sum())} envio(s)", delta_color="off")
+        cols[2].metric("Ainda deviam ao encerrar", len(aberto), repo.brl(aberto["EmAbertoNoFechamento"].sum()), delta_color="off")
+        cols[3].metric("Quitaram", int((h["SituacaoFinal"] == "QUITADO").sum()))
+        cols[4].metric("NF emitida", f"{int(precisam_nf['NFEmitida'].sum())} de {len(precisam_nf)}")
+        tabela = pd.DataFrame({
+            "Cliente": h["NomeCliente"],
+            "Envios": h["QtdEnvios"],
+            "1ª cobrança": h["PrimeiraCobrancaEm"].map(fmt_dt),
+            "Última": h["UltimaCobrancaEm"].map(fmt_dt),
+            "Última mensagem": h["UltimaMensagem"].fillna(""),
+            "Valor cobrado": h["ValorCobrado"].map(lambda v: repo.brl(v) if pd.notna(v) else ""),
+            "Devia ao encerrar": h["EmAbertoNoFechamento"].map(repo.brl),
+            "Resultado": h["SituacaoFinal"].map({"QUITADO": "Quitou", "EM_ABERTO": "Ainda devia"}),
+            "NF": h.apply(nf_historico, axis=1),
+            "Marcações": h.apply(lambda r: ", ".join(x for x, ativo in (("não cobrar no ciclo", r["NaoCobrarNoCiclo"]),
+                                                                        ("incobrável", r["Incobravel"])) if ativo), axis=1),
+        })
+        st.dataframe(tabela, hide_index=True, use_container_width=True)
+        st.caption(f"Foto gravada ao iniciar o ciclo seguinte ({fmt_dt(h['FechadoEm'].iloc[0])}). "
+                   "Ela não muda depois: é o retrato de como o ciclo terminou.")
+    elif mes == ciclo:
+        st.info("Este ciclo está em andamento: o estado atual está na aba **Fila**. A foto do ciclo (quem foi cobrado, NF, "
+                "quem quitou) é gravada automaticamente quando você iniciar o ciclo seguinte.")
+    else:
+        st.info("Este ciclo não tem foto (foi encerrado antes do histórico existir). Os envios registrados aparecem abaixo.")
+
+    env = _envios_ciclo(c, mes)
+    st.markdown(f"**Envios registrados em {repo.nome_mes(mes)}** — {len(env)}")
+    if env.empty:
+        st.caption("Nenhum envio registrado neste ciclo.")
+        return
+    st.dataframe(pd.DataFrame({
+        "Quando": env["EnviadoEm"].map(fmt_dt), "Cliente": env["NomeCliente"], "Mensagem": env["MensagemNome"],
+        "Valor": env["ValorNoEnvio"].map(repo.brl)}), hide_index=True, use_container_width=True)
+    with st.expander("Ver os textos enviados"):
+        for _, e in env.iterrows():
+            st.markdown(f"**{e['NomeCliente']}** · {e['MensagemNome']} · {fmt_dt(e['EnviadoEm'])}")
+            st.code(e["TextoEnviado"], language=None)
+
+
 # ---------------------------------------------------------------- principal
 
 def main():
@@ -519,13 +612,15 @@ def main():
         st.success(aviso)
 
     barra_lateral(c, ciclo)
-    tab_fila, tab_contatos, tab_mensagens = st.tabs(["Fila de cobrança", "Contatos", "Mensagens"])
+    tab_fila, tab_contatos, tab_mensagens, tab_historico = st.tabs(["Fila de cobrança", "Contatos", "Mensagens", "Histórico"])
     with tab_fila:
         aba_fila(c, ciclo)
     with tab_contatos:
         aba_contatos(c)
     with tab_mensagens:
         aba_mensagens(c, ciclo)
+    with tab_historico:
+        aba_historico(c, ciclo)
 
 
 main()

@@ -38,7 +38,7 @@ def test_app_sem_ciclo():
     assert any("Nenhum ciclo iniciado" in w.value for w in at.sidebar.warning)
     assert any("Iniciar cobrança de" in b.label for b in at.sidebar.button)
     assert any("Inicie a cobrança" in i.value for i in at.info), "fila deveria orientar a iniciar o ciclo"
-    assert len(at.tabs) == 3
+    assert len(at.tabs) == 4
 
 
 def test_app_inicia_ciclo_e_mostra_fila():
@@ -64,7 +64,7 @@ def test_app_inicia_ciclo_e_mostra_fila():
 def test_aba_contatos_renderiza():
     at = _app().run()
     assert not at.exception, at.exception
-    assert len(at.tabs) == 3
+    assert len(at.tabs) == 4
 
 
 def test_aba_mensagens_previa_e_marcador_desconhecido():
@@ -81,6 +81,41 @@ def test_aba_mensagens_previa_e_marcador_desconhecido():
     texto.input("Oi {nome_contato}, chave {pix} e {total}").run()   # nao salva: so digita
     assert not at.exception, at.exception
     assert any("pix" in w.value for w in at.warning), "deveria avisar do marcador {pix}, que nao existe mais"
+
+
+def test_aba_historico_ciclo_em_andamento():
+    """So leitura: com um ciclo real ainda nao encerrado, a aba explica que a foto sai ao iniciar o proximo."""
+    c = repo.get_client()
+    if not repo.ciclos_iniciados(c) or repo.ciclos_com_foto(c):
+        print("  (pulado: precisa de ciclo real iniciado e sem foto)")
+        return
+    at = _app().run()
+    assert not at.exception, at.exception
+    assert any("em andamento" in i.value for i in at.info), "deveria explicar que o ciclo esta em andamento"
+    assert any("Envios registrados" in m.value for m in at.markdown)
+
+
+def test_aba_historico_mostra_ciclo_encerrado():
+    """Grava um ciclo de mentira (1999-01, cliente -1) ja fotografado e confere que a aba mostra o resumo."""
+    c = repo.get_client()
+    mes = date(1999, 1, 1)
+    try:
+        repo.iniciar_ciclo(c, mes)
+        repo.salvar_contato(c, -1, "Teste", None, None, revisado=False)
+        repo.definir_nota_fiscal(c, -1, "COM_CPF")
+        repo.registrar_envio(c, -1, mes, "Inicial", "Maria", "5511999999999", 50.0, "texto que foi enviado")
+        assert repo.fechar_ciclo(c, mes) == 1
+        at = _app().run()
+        at.selectbox(key="hist_ciclo").select(mes).run()
+        assert not at.exception, at.exception
+        rotulos = [m.label for m in at.metric]
+        assert "Ainda deviam ao encerrar" in rotulos and "Quitaram" in rotulos and "NF emitida" in rotulos
+        assert any("Foto gravada" in cap.value for cap in at.caption)
+        assert any("Envios registrados" in m.value for m in at.markdown)
+    finally:
+        for tabela in (repo.T_HISTORICO, repo.T_ENVIOS, repo.T_CONTATOS):
+            repo._q(c, f"DELETE FROM {tabela} WHERE CodigoCliente = @k", k=("INT64", -1))
+        repo._q(c, f"DELETE FROM {repo.T_CICLOS} WHERE MesReferencia = @m", m=("DATE", mes))
 
 
 def test_painel_de_envio_marca_e_desfaz():

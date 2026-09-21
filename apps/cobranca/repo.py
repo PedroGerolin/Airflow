@@ -23,6 +23,7 @@ PROJECT = os.environ.get("BQ_PROJECT", "gerolingcp")
 T_CONTATOS = f"`{PROJECT}.FisioVet_App.contatos`"
 T_MENSAGENS = f"`{PROJECT}.FisioVet_App.mensagens`"
 T_ENVIOS = f"`{PROJECT}.FisioVet_App.envios`"
+T_HISTORICO = f"`{PROJECT}.FisioVet_App.ciclos_historico`"
 T_CICLOS = f"`{PROJECT}.FisioVet_App.ciclos`"
 V_PENDENCIAS = f"`{PROJECT}.FisioVet_Analytics.cobranca_pendencias`"
 V_SESSOES = f"`{PROJECT}.FisioVet_Analytics.cobranca_sessoes`"
@@ -250,6 +251,76 @@ def iniciar_ciclo(client, mes: date) -> bool:
     )
     job.result()
     return (job.num_dml_affected_rows or 0) > 0
+
+
+def fechar_ciclo(client, mes: date) -> int:
+    """Grava a 'foto' do ciclo em ciclos_historico (uma linha por cliente que devia, foi cobrado ou teve NF/pausa
+    neste ciclo) e marca ciclos.FechadoEm. Idempotente: quem ja tem foto nao duplica. Devolve quantas linhas gravou.
+    O estado 'em aberto no fechamento' vem da view da fila, que so vale para o ciclo MAIS RECENTE; para um ciclo
+    antigo essa parte fica vazia (por isso a foto e tirada ao iniciar o proximo, antes de qualquer mudanca)."""
+    n = _dml(client, f"""
+        INSERT INTO {T_HISTORICO}
+            (MesReferencia, CodigoCliente, NomeCliente, QtdEnvios, PrimeiraCobrancaEm, UltimaCobrancaEm, UltimaMensagem,
+             ValorCobrado, EmAbertoNoFechamento, SituacaoFinal, EstadoFila, NotaFiscal, NFEmitida, NaoCobrarNoCiclo,
+             Incobravel, FechadoEm)
+        WITH chaves AS (
+            SELECT CodigoCliente FROM {V_PENDENCIAS} WHERE MesCiclo = @mes
+            UNION DISTINCT SELECT CodigoCliente FROM {T_ENVIOS} WHERE MesReferencia = @mes
+            UNION DISTINCT SELECT CodigoCliente FROM {T_CONTATOS} WHERE NFEmitidaNoCiclo = @mes OR NaoCobrarNoCiclo = @mes
+        ),
+        env AS (
+            SELECT CodigoCliente, COUNT(*) AS QtdEnvios, MIN(EnviadoEm) AS Primeira, MAX(EnviadoEm) AS Ultima,
+                   ARRAY_AGG(MensagemNome ORDER BY EnviadoEm DESC LIMIT 1)[OFFSET(0)] AS UltimaMensagem,
+                   ARRAY_AGG(ValorNoEnvio ORDER BY EnviadoEm LIMIT 1)[OFFSET(0)] AS ValorCobrado
+            FROM {T_ENVIOS} WHERE MesReferencia = @mes GROUP BY CodigoCliente
+        ),
+        cad AS (SELECT CAST(Codigo AS INT64) AS Codigo, ANY_VALUE(Nome) AS Nome FROM {T_CLIENTS} GROUP BY 1)
+        SELECT @mes, k.CodigoCliente, COALESCE(p.NomeCliente, cad.Nome),
+               COALESCE(e.QtdEnvios, 0), e.Primeira, e.Ultima, e.UltimaMensagem, e.ValorCobrado,
+               COALESCE(p.TotalEmAberto, 0), IF(p.CodigoCliente IS NULL, 'QUITADO', 'EM_ABERTO'), p.EstadoFila,
+               c.NotaFiscal, COALESCE(c.NFEmitidaNoCiclo = @mes, FALSE), COALESCE(c.NaoCobrarNoCiclo = @mes, FALSE),
+               COALESCE(c.Situacao = 'INCOBRAVEL', FALSE), CURRENT_TIMESTAMP()
+        FROM chaves k
+        LEFT JOIN env e ON e.CodigoCliente = k.CodigoCliente
+        LEFT JOIN {V_PENDENCIAS} p ON p.CodigoCliente = k.CodigoCliente AND p.MesCiclo = @mes
+        LEFT JOIN {T_CONTATOS} c ON c.CodigoCliente = k.CodigoCliente
+        LEFT JOIN cad ON cad.Codigo = k.CodigoCliente
+        WHERE NOT EXISTS (SELECT 1 FROM {T_HISTORICO} h WHERE h.MesReferencia = @mes AND h.CodigoCliente = k.CodigoCliente)""",
+                mes=("DATE", mes))
+    _q(client, f"UPDATE {T_CICLOS} SET FechadoEm = IFNULL(FechadoEm, CURRENT_TIMESTAMP()) WHERE MesReferencia = @mes",
+       mes=("DATE", mes))
+    return n
+
+
+def iniciar_novo_ciclo(client, mes: date) -> dict:
+    """O que o botao 'Iniciar cobranca' chama: PRIMEIRO fotografa o ciclo atual (se houver), DEPOIS inicia o novo.
+    Se a foto falhar, o novo ciclo NAO e iniciado (a excecao sobe) — assim nunca se perde o historico."""
+    atual = ciclo_atual(client)
+    a_fechar = atual if atual and atual != mes else None
+    fotografados = fechar_ciclo(client, a_fechar) if a_fechar else 0
+    return {"fotografados": fotografados, "ciclo_fechado": a_fechar, "criado": iniciar_ciclo(client, mes)}
+
+
+def ciclos_com_foto(client) -> list[date]:
+    return [r["MesReferencia"] for r in _q(
+        client, f"SELECT DISTINCT MesReferencia FROM {T_HISTORICO} ORDER BY MesReferencia DESC")]
+
+
+def historico_df(client, mes: date) -> pd.DataFrame:
+    return _q(client, f"""
+        SELECT * FROM {T_HISTORICO} WHERE MesReferencia = @mes
+        ORDER BY (SituacaoFinal = 'EM_ABERTO') DESC, EmAbertoNoFechamento DESC, NomeCliente""",
+              mes=("DATE", mes)).to_dataframe()
+
+
+def envios_do_ciclo(client, mes: date) -> pd.DataFrame:
+    """Registro completo dos envios do ciclo (funciona para o ciclo atual e para os antigos)."""
+    return _q(client, f"""
+        SELECT e.EnviadoEm, e.CodigoCliente, cl.Nome AS NomeCliente, e.MensagemNome, e.ValorNoEnvio, e.TextoEnviado
+        FROM {T_ENVIOS} e
+        LEFT JOIN (SELECT CAST(Codigo AS INT64) AS Codigo, ANY_VALUE(Nome) AS Nome FROM {T_CLIENTS} GROUP BY 1) cl
+               ON cl.Codigo = e.CodigoCliente
+        WHERE e.MesReferencia = @mes ORDER BY e.EnviadoEm""", mes=("DATE", mes)).to_dataframe()
 
 
 def fila(client) -> pd.DataFrame:

@@ -116,13 +116,15 @@ estruturalmente idênticas em tipagem** — isso já causou bugs reais (setembro
 
 ### Janela da exportação de vendas e recarga completa
 
-`export_sales()` baixa **do dia 1 do mês passado até hoje** (~31–61 dias) e cada partição
+`export_sales()` baixa **do dia 1 de 4 meses atrás até hoje** (`MESES_JANELA_VENDAS = 4`, ≥ 120 dias em qualquer dia do ano; era só 1 mês até 21/09/2026) e cada partição
 `FisioVet/sales/date=AAAA-MM-DD/` só é regravada enquanto está nessa janela — depois vira uma
 **fotografia congelada**. Baixas dadas depois (cliente que paga a cobrança de julho só em setembro)
 não chegam ao warehouse; em 20/09/2026 isso fazia Julho/2026 aparecer com 55 clientes/R$ 42,9 mil
 "em aberto" que já estavam pagos. O `dbt` (`sales` incremental) reprocessa 120 dias, mas isso é sobre o
-que já está no bucket, não sobre o que a exportação baixa. O usuário aceitou o risco (pagamentos com mais
-de ~2 meses de atraso são raros; baixa manual se ocorrer) — ver decisão pendente sobre ampliar a janela.
+que já está no bucket, não sobre o que a exportação baixa. Em 21/09/2026 a janela foi ampliada para 4 meses
+porque a fila de cobrança carrega dívidas antigas: uma baixa fora da janela faria cobrar quem já pagou.
+Pagamento de sessão com mais de 4 meses ainda exige baixa manual/recarga completa. O download espera o CSV
+terminar (`wait_for_download`) em toda execução.
 
 **Recarga completa** (foi feita em 20/09/2026, 01/08/2023 → hoje, 965 partições, ~17 min):
 1. Backup opcional: `gcloud storage cp -r gs://gerolin_etl/FisioVet/sales gs://gerolin_etl/_backup/FisioVet_sales_<data>/`
@@ -182,6 +184,11 @@ texto (o app mostra o texto para copiar). Testes de gravação usam cliente `-1`
 **Nota fiscal** (`contatos.NotaFiscal` = `COM_CPF`/`SEM_CPF`/vazio, permanente; `contatos.NFEmitidaNoCiclo` = mês do ciclo em que a NF foi
 emitida, **expira sozinha** no ciclo seguinte, como `NaoCobrarNoCiclo`). A view expõe `NotaFiscal`, `NFStatus` (NULL|PENDENTE|EMITIDA) e
 `TemCPF` (só sim/não — **o CPF não sai na view**, o Metabase lê esse dataset). Marcar "emitida" em quem não tem NF configurada é ignorado.
+**Histórico de ciclos**: `contatos.NFEmitidaNoCiclo`/`NaoCobrarNoCiclo` só guardam o último ciclo, então ao **iniciar o ciclo seguinte** o app
+grava a "foto" do ciclo anterior em `ciclos_historico` (uma linha por cliente que devia, foi cobrado ou teve NF/pausa: nº de envios, valor
+cobrado, quanto ainda devia, NF, marcações; **só inserção**) e marca `ciclos.FechadoEm`. `repo.iniciar_novo_ciclo` fotografa PRIMEIRO e só depois
+inicia (se a foto falhar, o ciclo novo não começa). `envios` já guarda tudo dos envios e nunca é limpo. Aba **Histórico** mostra a foto e os
+envios de cada ciclo. Nunca chamar `fechar_ciclo` no ciclo real em testes (o "em aberto" vem da view da fila, que só vale para o ciclo mais recente).
 **Atributos do cliente (nome, telefone) vêm do cadastro (`clients`), nunca das vendas**: `sales` só reexporta a janela
 recente, então as vendas antigas guardam o nome congelado (em 21/09/2026 a fila mostrava em maiúsculas um nome já corrigido
 no sistema). `cobranca_pendencias.NomeCliente` usa `clients.Nome` com fallback para o das vendas.
@@ -277,6 +284,10 @@ sucesso (foi exatamente o que quebrou no primeiro teste: o aviso inofensivo
 em arquivos temporários (sem `2>&1`), mata a árvore de processos se estourar o tempo e deixa o código de
 saída em `$script:DockerExit` (`-1` = timeout). Não chamar `docker` "cru" no script; argumentos sem espaços;
 manter o arquivo em ASCII. Se o log da execução do dia mostrar "motor nao responde": reiniciar o Docker Desktop.
+
+**"Atualizar dados agora"**: `scripts/atualizar_agora.ps1` (atalho na área de trabalho, criado por `scripts/create_desktop_shortcut.ps1`)
+dispara a MESMA tarefa agendada, acompanha o log e mostra o resultado (~4,5 min); se já houver uma execução em curso, só acompanha.
+`-NoPause` para uso não interativo.
 
 ## Ambiente de desenvolvimento
 

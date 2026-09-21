@@ -84,7 +84,7 @@ for ds in FisioVet FisioVet_Analytics; do
 done
 
 # tabelas e dados iniciais (scripts versionados em gcp_setup/sql/, rodar nesta ordem)
-for f in 01_fisiovet_app_tables 02_seed_mensagens 03_seed_contatos 04_ajuste_como_chamar_e_animais 05_nota_fiscal; do
+for f in 01_fisiovet_app_tables 02_seed_mensagens 03_seed_contatos 04_ajuste_como_chamar_e_animais 05_nota_fiscal 06_sem_pix 07_historico_de_ciclos; do
   SQL=$'\n'"$(cat gcp_setup/sql/$f.sql)"      # ver armadilha 1 abaixo
   bq query --project_id=gerolingcp --location=US --nouse_legacy_sql "$SQL"
 done

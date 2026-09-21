@@ -11,6 +11,18 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.keys import Keys
 from airflow.models import Connection
 
+MESES_JANELA_VENDAS = 4
+
+
+def inicio_da_janela(hoje: datetime.date, meses_atras: int) -> datetime.date:
+    """Dia 1 do mês que fica `meses_atras` meses antes do mês de `hoje` (1 = dia 1 do mês passado)."""
+    ano, mes = hoje.year, hoje.month - meses_atras
+    while mes < 1:
+        mes += 12
+        ano -= 1
+    return datetime.date(ano, mes, 1)
+
+
 class fisioVetDownloader:
 
     def __init__(self):
@@ -92,12 +104,11 @@ class fisioVetDownloader:
     def export_sales(self, data_inicial=None):
         # data_inicial (dd/mm/aaaa) só é usada na RECARGA COMPLETA (--conf sales_start_date da DAG);
         # na execução diária fica None e vale a janela padrão abaixo.
-        # --- OPÇÃO 1: Primeiro dia do MÊS PASSADO (Ex: se hoje é Julho, pega 01/06) ---
-        dataInicial = (datetime.date.today().replace(day=1) - timedelta(days=1)).replace(day=1).strftime("%d/%m/%Y")
-        
-        # --- OPÇÃO 2: Primeiro dia do MÊS RETRASADO (Ex: se hoje é Julho, pega 01/05) ---
-        # dataInicial = ((datetime.date.today().replace(day=1) - timedelta(days=1)).replace(day=1) - timedelta(days=1)).replace(day=1).strftime("%d/%m/%Y")
-        
+        # Janela diária: do dia 1 de MESES_JANELA_VENDAS meses atrás até hoje (ex.: hoje 21/10, 4 meses -> 01/06).
+        # Cada partição diária do GCS só é regravada enquanto está na janela; depois vira uma fotografia congelada.
+        # 4 meses (>= 120 dias em qualquer dia do ano) cobre os 120 dias que o dbt reprocessa, e a fila de cobrança carrega dívidas de
+        # meses antigos: uma baixa dada fora da janela nunca chegaria ao warehouse (visto em 20/09/2026).
+        dataInicial = inicio_da_janela(datetime.date.today(), MESES_JANELA_VENDAS).strftime("%d/%m/%Y")
         dataFinal = datetime.date.today().strftime("%d/%m/%Y")
 
         if data_inicial:
@@ -117,9 +128,9 @@ class fisioVetDownloader:
         btn_exportarcsv.click()
         time.sleep(2)
 
-        if data_inicial:
-            # período longo demora mais que o sleep fixo: espera o CSV terminar de baixar
-            self.wait_for_download("Vendas.csv")
+        # período de vários meses demora mais que o sleep fixo: espera o CSV terminar de baixar
+        # (a transformação apaga o original depois de usar, então não há arquivo velho para confundir a espera)
+        self.wait_for_download("Vendas.csv")
 
     def wait_for_download(self, file_name, timeout=600):
         folder = "/opt/airflow/files/FisioVet"

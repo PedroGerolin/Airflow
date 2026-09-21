@@ -151,6 +151,7 @@ def _limpar(c):
     repo._q(c, f"DELETE FROM {repo.T_CICLOS} WHERE MesReferencia = @m", m=("DATE", MES_TESTE))
     repo._q(c, f"DELETE FROM {repo.T_CONTATOS} WHERE CodigoCliente = @k", k=("INT64", SENTINELA))
     repo._q(c, f"DELETE FROM {repo.T_ENVIOS} WHERE CodigoCliente = @k", k=("INT64", SENTINELA))
+    repo._q(c, f"DELETE FROM {repo.T_HISTORICO} WHERE CodigoCliente = @k", k=("INT64", SENTINELA))
 
 
 def test_ciclo_idempotente():
@@ -305,6 +306,81 @@ def test_mensagens_reais_para_a_fila():
         assert url.startswith("https://web.whatsapp.com/send?phone=")
     for m in repo.mensagens_df(c).itertuples():
         assert repo.marcadores_desconhecidos(m.Texto) == [], f"modelo {m.Nome!r} tem marcador desconhecido"
+
+
+def test_iniciar_novo_ciclo_fotografa_antes_de_iniciar():
+    """Ordem: fotografa o ciclo atual e SO ENTAO inicia o novo; se a foto falhar, o novo NAO inicia.
+    Usa funcoes substitutas: nunca fotografa o ciclo real."""
+    chamadas = []
+    originais = (repo.ciclo_atual, repo.fechar_ciclo, repo.iniciar_ciclo)
+    try:
+        repo.ciclo_atual = lambda c: date(2026, 8, 1)
+        repo.fechar_ciclo = lambda c, m: chamadas.append(("fechar", m)) or 5
+        repo.iniciar_ciclo = lambda c, m: chamadas.append(("iniciar", m)) or True
+        r = repo.iniciar_novo_ciclo(None, date(2026, 9, 1))
+        assert chamadas == [("fechar", date(2026, 8, 1)), ("iniciar", date(2026, 9, 1))], chamadas
+        assert r == {"fotografados": 5, "ciclo_fechado": date(2026, 8, 1), "criado": True}
+
+        chamadas.clear()
+
+        def falha(c, m):
+            raise RuntimeError("foto falhou")
+        repo.fechar_ciclo = falha
+        try:
+            repo.iniciar_novo_ciclo(None, date(2026, 9, 1))
+        except RuntimeError:
+            pass
+        else:
+            raise AssertionError("a falha da foto deveria subir")
+        assert chamadas == [], "com a foto falhando, o ciclo novo NAO pode ser iniciado"
+
+        repo.ciclo_atual = lambda c: None     # primeiro ciclo de todos: nada a fotografar
+        repo.fechar_ciclo = lambda c, m: (_ for _ in ()).throw(AssertionError("nao devia fotografar"))
+        r = repo.iniciar_novo_ciclo(None, date(2026, 9, 1))
+        assert r["fotografados"] == 0 and r["ciclo_fechado"] is None and chamadas == [("iniciar", date(2026, 9, 1))]
+    finally:
+        repo.ciclo_atual, repo.fechar_ciclo, repo.iniciar_ciclo = originais
+
+
+def test_fechar_ciclo_foto_do_historico():
+    """Cliente de mentira (-1) e mes 1999-01: envios, NF emitida e 'nao cobrar' viram uma linha de historico
+    que NAO muda depois (mesmo que o estado do contato mude no ciclo seguinte) e nao duplica."""
+    c = _cliente()
+    mes = MES_TESTE
+    try:
+        assert repo.iniciar_ciclo(c, mes)
+        repo.salvar_contato(c, SENTINELA, "Teste", None, None, revisado=False)
+        repo.definir_nota_fiscal(c, SENTINELA, "SEM_CPF")
+        repo.definir_nf_emitida(c, SENTINELA, mes)
+        repo.definir_nao_cobrar(c, SENTINELA, mes)
+        repo.registrar_envio(c, SENTINELA, mes, "Inicial", "Maria", "5511999999999", 100.0, "t1")
+        repo.registrar_envio(c, SENTINELA, mes, "Lembrete", "Maria", "5511999999999", 100.0, "t2")
+
+        assert repo.fechar_ciclo(c, mes) == 1
+        h = repo.historico_df(c, mes)
+        linha = h[h["CodigoCliente"] == SENTINELA].iloc[0]
+        assert int(linha["QtdEnvios"]) == 2 and linha["UltimaMensagem"] == "Lembrete"
+        assert float(linha["ValorCobrado"]) == 100.0 and float(linha["EmAbertoNoFechamento"]) == 0.0
+        assert linha["SituacaoFinal"] == "QUITADO"          # nao esta na fila (nao deve nada)
+        assert linha["NotaFiscal"] == "SEM_CPF" and bool(linha["NFEmitida"]) is True
+        assert bool(linha["NaoCobrarNoCiclo"]) is True and bool(linha["Incobravel"]) is False
+        assert not pd.isna(linha["PrimeiraCobrancaEm"]) and linha["PrimeiraCobrancaEm"] <= linha["UltimaCobrancaEm"]
+        assert repo.fechar_ciclo(c, mes) == 0, "fotografar de novo nao duplica"
+        assert mes in repo.ciclos_com_foto(c)
+        fechado = list(repo._q(c, f"SELECT FechadoEm FROM {repo.T_CICLOS} WHERE MesReferencia = @m", m=("DATE", mes)))[0]["FechadoEm"]
+        assert fechado is not None
+
+        # ciclo seguinte: o usuario refaz NF / pausa; a foto do ciclo anterior continua igual
+        repo.definir_nf_emitida(c, SENTINELA, None)
+        repo.definir_nao_cobrar(c, SENTINELA, None)
+        h2 = repo.historico_df(c, mes)
+        l2 = h2[h2["CodigoCliente"] == SENTINELA].iloc[0]
+        assert bool(l2["NFEmitida"]) is True and bool(l2["NaoCobrarNoCiclo"]) is True, "a foto nao muda depois"
+
+        e = repo.envios_do_ciclo(c, mes)
+        assert (e["CodigoCliente"] == SENTINELA).sum() == 2 and e["EnviadoEm"].is_monotonic_increasing
+    finally:
+        _limpar(c)
 
 
 def test_parametros_nao_sao_injecao():
