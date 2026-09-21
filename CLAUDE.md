@@ -175,6 +175,9 @@ montada só-leitura, `restart: unless-stopped`. Subir: `cd apps/cobranca && dock
 mentira, limpam no `finally` e pulam se já existir ciclo real). Versão do Streamlit fixada em `requirements.txt`.
 v1 = fila + contatos + iniciar ciclo + "não cobrar"/incobrável; **v2 (a fazer)**: modelos de mensagem, links
 `wa.me` e registro de `envios`.
+**Atributos do cliente (nome, telefone) vêm do cadastro (`clients`), nunca das vendas**: `sales` só reexporta a janela
+recente, então as vendas antigas guardam o nome congelado (em 21/09/2026 a fila mostrava em maiúsculas um nome já corrigido
+no sistema). `cobranca_pendencias.NomeCliente` usa `clients.Nome` com fallback para o das vendas.
 **Status de venda existentes em `sales`**: `Baixado`, `Aberto`, `Baixa parcial`, `Em atendimento` (novo, visto em
 21/09/2026: venda do dia ainda aberta no sistema). As views de cobrança olham só `Aberto`/`Baixa parcial`; se um
 `Em atendimento` de mês fechado aparecer, ele ficaria fora da fila — vigiar. `faturamento_cliente.ValorEmAberto`

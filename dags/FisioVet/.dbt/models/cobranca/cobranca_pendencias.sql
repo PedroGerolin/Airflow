@@ -11,6 +11,9 @@
      NAO_COBRAR_NO_CICLO  contatos.NaoCobrarNoCiclo = ciclo atual (expira sozinho no ciclo seguinte)
      COBRADO              ja tem ao menos 1 envio NESTE ciclo
      A_COBRAR             nenhum envio neste ciclo
+   NomeCliente vem do CADASTRO (clients, refeito por inteiro a cada execucao), nao das vendas: as vendas antigas
+   (fora da janela da exportacao) guardam o nome congelado de quando sairam da janela. So cai no nome das vendas
+   se o cliente nao existir no cadastro.
    Contato: usa contatos (app) e, se o cliente nao tiver linha la, o telefone do cadastro do Simples Vet e o
    PRIMEIRO NOME do cliente. NomeContato = "como chamar" na mensagem ({nome_contato}). Animais = os animais com
    sessao em aberto (marcador {animais}; o app junta com " e "). #}
@@ -31,6 +34,7 @@ WITH sessoes AS (
 cadastro AS (
     SELECT
         CAST(Codigo AS INT64) AS CodigoCliente,
+        Nome,
         CONCAT('55', REGEXP_REPLACE(REGEXP_EXTRACT(Telefone, r'(\(\d{2}\)\s*9\d{4}-?\d{4})'), r'\D', '')) AS TelefoneCadastro
     FROM {{ ref('clients') }}
     QUALIFY ROW_NUMBER() OVER (PARTITION BY Codigo ORDER BY Nome) = 1
@@ -49,7 +53,7 @@ envios AS (
 )
 SELECT
     P.CodigoCliente,
-    P.NomeCliente,
+    COALESCE(K.Nome, P.NomeCliente) AS NomeCliente,
     P.MesCiclo,
     P.Animais,
     P.QtdSessoes,
@@ -57,7 +61,7 @@ SELECT
     P.TemBaixaParcial,
     P.MesMaisAntigo,
     P.SessaoMaisAntiga,
-    COALESCE(T.NomeContato, INITCAP(SPLIT(TRIM(P.NomeCliente), ' ')[SAFE_OFFSET(0)])) AS NomeContato,
+    COALESCE(T.NomeContato, INITCAP(SPLIT(TRIM(COALESCE(K.Nome, P.NomeCliente)), ' ')[SAFE_OFFSET(0)])) AS NomeContato,
     COALESCE(T.TelefoneWhatsapp, K.TelefoneCadastro) AS TelefoneWhatsapp,
     COALESCE(REGEXP_CONTAINS(COALESCE(T.TelefoneWhatsapp, K.TelefoneCadastro), r'^55\d{10,11}$'), FALSE) AS TelefoneValido,
     IF(T.CodigoCliente IS NOT NULL, 'APP', 'CADASTRO') AS OrigemContato,
