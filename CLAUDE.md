@@ -146,6 +146,25 @@ o arquivo `contas-a-pagar.csv` que a DAG transforma/transfere precisa ser obtido
 `weather_summary` → `Exporter` reexporta o resultado do BigQuery pra GCS em parquet.
 Schedule semanal (`0 0 * * 1`) com `catchup=True`.
 
+## Cobrança por WhatsApp (em construção desde 21/09/2026)
+
+App de cobrança (Streamlit, ainda a construir) sobre tabelas no **BigQuery** (dataset `FisioVet_App`,
+escrito só pelo app; o dbt não escreve lá): `contatos`, `ciclos`, `mensagens`, `envios`,
+`configuracoes` — DDL e seeds em `gcp_setup/sql/`, SA `cobranca-app` e IAM em `gcp_setup/README.md`
+(seção 4). O desenho completo e as regras de negócio estão nas anotações do usuário (`ROADMAP.md`,
+seção "Cobrança por WhatsApp"). **Dados de clientes (telefones, nomes, valores) nunca entram no repo**;
+só SQL/código.
+
+O dbt tem `models/cobranca/`: `cobranca_sessoes` (sessões `Aberto`/`Baixa parcial` até o corte do
+ciclo atual = mês do último `ciclos.MesReferencia`; sem ciclo iniciado a view fica vazia) e
+`cobranca_pendencias` (fila: uma linha por cliente, `EstadoFila` derivado). São **views só do BigQuery**
+(`enabled=(target.type == 'bigquery')` no `config`): as tabelas do app não existem no Snowflake, então
+esses modelos ficam de fora do `dbt_run_snowflake` — exceção consciente à regra de paridade.
+Rodar o dbt local no BigQuery sem o container: perfil temporário com `keyfile` no caminho do Windows +
+`--target-path`/`--log-path` fora do projeto (senão o cache `target/` quebra o container).
+Validar mudanças de estado (ciclo, envio, "não cobrar") dentro de `BEGIN TRANSACTION ... ROLLBACK` para não
+sujar as tabelas do usuário.
+
 ## Convenções e pontos de atenção
 
 - **Estilo de DAG inconsistente**: FisioVet usa TaskFlow API (`@dag`/`@task`/`@task_group`);
@@ -225,6 +244,14 @@ a `docker`/`docker compose` — no PowerShell 5.1, isso embrulha a saída num `E
 com `$ErrorActionPreference = "Stop"`, interrompe o script mesmo quando o comando teve
 sucesso (foi exatamente o que quebrou no primeiro teste: o aviso inofensivo
 `AIRFLOW_UID not set` do `docker compose up` foi tratado como erro fatal).
+
+**Toda chamada ao docker nesse script passa por `Invoke-Docker` (com limite de tempo).** Em
+21/09/2026 o motor do Docker travou depois do notebook acordar (processos do Docker Desktop vivos, mas
+`docker version` nunca respondia): o script antigo ficou pendurado sem escrever nada no log, e até o
+`docker compose down` do `finally` teria pendurado. `Invoke-Docker` usa `Start-Process` com stdout/stderr
+em arquivos temporários (sem `2>&1`), mata a árvore de processos se estourar o tempo e deixa o código de
+saída em `$script:DockerExit` (`-1` = timeout). Não chamar `docker` "cru" no script; argumentos sem espaços;
+manter o arquivo em ASCII. Se o log da execução do dia mostrar "motor nao responde": reiniciar o Docker Desktop.
 
 ## Ambiente de desenvolvimento
 

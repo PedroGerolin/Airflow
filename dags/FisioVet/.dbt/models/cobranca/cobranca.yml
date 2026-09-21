@@ -1,0 +1,16 @@
+version: 2
+
+models:
+  - name: cobranca_sessoes
+    description: "Sessoes ainda devidas (Aberto ou Baixa parcial) ate o corte do ciclo atual. Uma linha por item de venda. So BigQuery."
+  - name: cobranca_pendencias
+    description: "Fila de cobranca: uma linha por cliente que deve algo ate o corte do ciclo atual, com contato efetivo e EstadoFila derivado. So BigQuery."
+    columns:
+      - name: CodigoCliente
+        tests:
+          - unique
+          - not_null
+      - name: EstadoFila
+        tests:
+          - accepted_values:
+              values: ['A_COBRAR', 'COBRADO', 'NAO_COBRAR_NO_CICLO', 'INCOBRAVEL']

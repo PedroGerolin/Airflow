@@ -1,0 +1,11 @@
+version: 2
+
+# Tabelas ESCRITAS PELO APP de cobranca (Streamlit) — nao sao do dbt. Criadas em gcp_setup/sql/.
+# So existem no BigQuery; por isso os modelos de cobranca ficam desabilitados no Snowflake.
+sources:
+  - name: FisioVet_App
+    schema: FisioVet_App
+    tables:
+      - name: contatos
+      - name: ciclos
+      - name: envios
