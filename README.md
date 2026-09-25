@@ -21,9 +21,26 @@ This is a real system used by a real small business, built and operated solo. It
 - **Orchestrate**: a hardened PowerShell script brings Docker up, triggers the DAG, waits for completion,
   and tears Docker back down — so the pipeline runs daily without a machine staying on 24/7.
 
-```
-Selenium ──► CSV ──► GCS (partitioned) ──┬──► dbt ──► BigQuery  ──► Streamlit billing app
-                                          └──► dbt ──► Snowflake
+```mermaid
+flowchart TD
+    subgraph Airflow["Apache Airflow — runs daily, unattended"]
+        A[Simples Vet<br/>clinic's practice-management SaaS] -->|Selenium: login + export| B[CSV<br/>clients, sales, animals]
+        B --> C[(GCS<br/>partitioned by date)]
+        C --> D[dbt run<br/>--target bigquery]
+        C --> E[dbt run<br/>--target snowflake]
+    end
+
+    D --> F[(BigQuery)]
+    E --> G[(Snowflake)]
+    F -.->|COUNT, MIN/MAX date, SUM<br/>after every run — caught 3 real bugs| G
+
+    F --> H[Streamlit<br/>billing app]
+    H -->|WhatsApp Web link| I((Client))
+
+    classDef wh fill:#fff3e0,stroke:#ef6c00,color:#e65100
+    classDef app fill:#e8f5e9,stroke:#2e7d32,color:#1b5e20
+    class F,G wh
+    class H,I app
 ```
 
 ## Engineering notes worth reading
