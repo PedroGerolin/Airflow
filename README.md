@@ -80,6 +80,12 @@ migrating Snowflake auth to key pairs ahead of its password-login deprecation, a
 above. Not designed to be run by anyone else — it authenticates against one specific business's systems —
 but every file is real, and the commit history is real.
 
+## Author
+
+**Pedro Gerolin** — Specialist Data Engineer at Cruzeiro do Sul Educacional (GCP/BigQuery/Dataform by day).
+This repo is where I build with the tools my day job doesn't touch yet.
+[LinkedIn](https://www.linkedin.com/in/pedrogerolin/) · pedro_gerolin@yahoo.com.br
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
